@@ -1,0 +1,5 @@
+infrastructure/mkdocs/site
+venv
+.venv
+__pycache__
+temp_example

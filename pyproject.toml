@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "mkdocs-deploy"
+version = "0.1.0"
+description = "Mkdocs versioning and deployment tool"
+authors = ["Philip Couling <couling@gmail.com>"]
+readme = "README.md"
+# license = "MIT" ???
+packages = [
+    { include = "mkdocs_deploy", from = "source" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pydantic = "^1.10.4"
+click = "^8.1"
+mkdocs = ">1.4.0"
+boto3 = "^1.26.45"
+
+[tool.poetry.plugins."mkdocs.plugins"]
+"mkdocs-deploy" = "mkdocs_deploy.mkdocs_plugin:MkdocsDeploy"
+
+[tool.poetry.plugins."mkdocs_deploy.plugins"]
+"local" = "mkdocs_deploy.plugins.local_filesystem:enable_plugin"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
