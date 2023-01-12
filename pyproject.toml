@@ -11,11 +11,13 @@ packages = [
     { include = "mkdocs_deploy", from = "source" },
 ]
 
+[tool.poetry.scripts]
+mkdocs-deploy = 'mkdocs_deploy.main:main'
+
 [tool.poetry.dependencies]
 python = "^3.8"
 pydantic = "^1.10.4"
 click = "^8.0"
-mkdocs = ">1.4.0"
 boto3 = "^1.26.45"
 
 [tool.poetry.plugins."mkdocs.plugins"]
