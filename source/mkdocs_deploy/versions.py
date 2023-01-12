@@ -3,11 +3,14 @@ from typing import Iterable
 import pydantic
 
 
+DEPLOYMENTS_FILENAME = 'deployments.json'
+MIKE_VERSIONS_FILENAME = 'versions.json'
+
+
 # [{"version": "2.1", "title": "2.1", "aliases": []}, {"version": "2.0", "title": "2.0", "aliases": ["latest"]}]
 
-
 class MikeVersion(pydantic.BaseModel):
-    version_id: str = pydantic.Field(alias="version")
+    version: str
     title: str = None
     aliases: list[str] = []
 

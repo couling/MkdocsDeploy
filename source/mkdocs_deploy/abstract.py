@@ -98,6 +98,8 @@ class TargetSession(Protocol):
         """
         raise
 
+
+    @abstractmethod
     def delete_file(self, version_id: str, filename: str) -> None:
         """
         Delete a file, or mark it for deletion on close.
@@ -207,7 +209,6 @@ class RedirectMechanism(Protocol):
         self.delete_redirect(session, alias)
         self.create_redirect(session, alias, version_id)
 
-
 _SOURCES = {}
 
 _TARGETS = {}
@@ -223,7 +224,7 @@ def register_source(source_scheme: str, source_class: Callable[[str], Source]) -
     _SOURCES[source_scheme] = source_class
 
 
-def register_target(target_scheme: str, target_class: Callable[[str], Target]):
+def register_target(target_scheme: str, target_class: Callable[[str], Target]) -> None:
     """
     Register a target type.
 

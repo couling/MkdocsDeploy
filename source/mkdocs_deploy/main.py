@@ -6,6 +6,7 @@ import sys
 
 from . import actions
 from .abstract import source_for_url, target_for_url
+from contextlib import ExitStack
 
 
 _LOG_FORMAT = "%(levelname)s: %(message)s"
@@ -43,7 +44,12 @@ def deploy(site: str, version: str, target_url: str, title:Optional[str], alias:
     TARGET_URL: Where the site is to be published excluding the version number
     """
     target = target_for_url(target_url=target_url)
-    with source_for_url(source_url=site) as source,  target.start_session() as target_session:
+    with ExitStack() as exit_stack:
+        try:
+            source = exit_stack.enter_context(source_for_url(source_url=site))
+        except FileNotFoundError as exc:
+            raise click.ClickException(str(exc))
+        target_session = exit_stack.enter_context(target.start_session())
         actions.upload(source=source, target=target_session, version_id=version, title=title)
         for _alias in alias:
             actions.create_alias(target=target_session, alias_id=_alias, version=version)

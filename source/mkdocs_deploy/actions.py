@@ -6,8 +6,8 @@ other subtasks for completion.  For example deleting a version will also delete 
 actions are closer to 1:1 with command line requests.  Importantly they are agnostic to the underlying Source and
 TargetSession.
 """
+import importlib.metadata
 import logging
-import pkg_resources
 from typing import Iterable, Optional
 
 from .abstract import Source, TargetSession, VersionNotFound
@@ -22,7 +22,7 @@ def load_plugins() -> None:
 
     This should be run only ONCE at program startup.
     """
-    for entry_point in pkg_resources.iter_entry_points('mkdocs_deploy.plugins'):
+    for entry_point in importlib.metadata.entry_points(group='mkdocs_deploy.plugins'):
         try:
             _logger.debug("Enabling plugin '%s'", entry_point.name)
             enable_plugin = entry_point.load()
@@ -56,7 +56,7 @@ def upload(source: Source, target: TargetSession, version_id: str, title: Option
             target.upload_file(
                 version_id=version_id,
                 filename=filename,
-                file_obj=file_obj
+                file_obj=file_obj,
             )
 
     if refreshing:
@@ -93,23 +93,26 @@ def create_alias(target: TargetSession, alias_id: str, version: str,  mechanism:
     :param version: The version_id to point to
     :param mechanism: The named mechanism to use.  If None then the target will choose the mechanism.
     """
-    _logger.info("Creating %s alias redirect %s to %s", mechanism if mechanism is not None else "default"
-                 , alias_id, version)
-    available_redirect_mechanisms = target.available_redirect_mechanisms
-    existing_deployment_spec = target.deployment_spec
     if mechanism is None:
         mechanism = "html"
+    _logger.info("Creating %s alias redirect %s to %s", mechanism, alias_id, version)
+    available_redirect_mechanisms = target.available_redirect_mechanisms
+    existing_deployment_spec = target.deployment_spec
     if mechanism not in available_redirect_mechanisms:
         raise ValueError(f"LocalFileTreeTarget does not support redirect mechanism: {mechanism}")
     if alias_id in existing_deployment_spec.versions:
-        raise ValueError(f"Cannot create an alias with the same name as an existing verison. "
+        raise ValueError(f"Cannot create an alias with the same name as an existing version. "
                          f"Delete the version first! Alias name: {alias_id}")
-        # This assumes the same mechanism was used to create the alias.
     if alias_id in existing_deployment_spec.aliases:
         alias = existing_deployment_spec.aliases[alias_id]
         if alias.version_id != version:
-            raise ValueError(f"Cannont create alias {alias_id} pointing to {version}. "
-                             f"One already points to {alias.version_id}.  Delete that first.")
+            for mechanism in alias.redirect_mechanisms:
+                if mechanism not in available_redirect_mechanisms:
+                    raise ValueError(f"LocalFileTreeTarget does not support redirect mechanism: {mechanism}.  "
+                                     f"Unable to remove redirect for {alias_id}-->{alias.version_id}")
+                available_redirect_mechanisms[mechanism].delete_redirect(target, alias_id)
+            alias.version_id = version
+            alias.redirect_mechanisms.clear()
         if mechanism not in alias.redirect_mechanisms:
             available_redirect_mechanisms[mechanism].create_redirect(
                 session=target,
@@ -118,6 +121,8 @@ def create_alias(target: TargetSession, alias_id: str, version: str,  mechanism:
             )
             alias.redirect_mechanisms.add(mechanism)
             target.set_alias(alias_id, alias)
+        else:
+            _logger.debug("mechanism %s already in place, skipping", mechanism)
     else:
         alias = DeploymentAlias(version_id=version, redirect_mechanisms={mechanism})
         target.set_alias(alias_id, alias)

@@ -1,10 +1,11 @@
 import logging
+import os
 import tarfile
 import urllib.parse
 import zipfile
 from copy import deepcopy
 from pathlib import Path
-from typing import IO, Iterable, Optional
+from typing import IO, Iterable, Optional, Union
 
 from .. import abstract, shared_implementations
 from ..versions import DeploymentAlias, DeploymentSpec, DeploymentVersion
@@ -28,7 +29,7 @@ def enable_plugin() -> None:
 
 class LocalFileTreeSource(abstract.Source):
 
-    def __init__(self, file_path: Path):
+    def __init__(self, file_path: Union[Path]):
         self._file_path = file_path
 
     def iter_files(self) -> Iterable[str]:
@@ -47,10 +48,13 @@ class LocalFileTreeSource(abstract.Source):
 
 class TarSource(abstract.Source):
 
-    def __init__(self, file_path: Path, prefix: str = "site/"):
+    def __init__(self, file_path: Union[Path, IO[bytes]], prefix: str = "site/"):
         super().__init__()
         self._prefix = prefix
-        self._tar_file = tarfile.open(file_path, "r")
+        if isinstance(file_path, (str, Path)):
+            self._tar_file = tarfile.open(name=file_path, mode="r")
+        else:
+            self._tar_file = tarfile.open(fileobj=file_path, mode="r")
 
     def iter_files(self) -> Iterable[str]:
         for file in self._tar_file.getmembers():
@@ -67,7 +71,7 @@ class TarSource(abstract.Source):
 
 class ZipSource(abstract.Source):
 
-    def __init__(self, file_path: Path, prefix: str = "site/"):
+    def __init__(self, file_path: Union[Path, IO[bytes]], prefix: str = "site/"):
         super().__init__()
         self._prefix = prefix
         self._zip_file = zipfile.ZipFile(file_path, "r")
@@ -92,14 +96,38 @@ def open_source(path: str) -> abstract.Source:
     if path.is_dir():
         return LocalFileTreeSource(path)
 
-    suffixes = [suffix.lower() for suffix in path.suffixes]
-    if suffixes and (suffixes[-1] == ".tar" or suffixes[-2] == ".tar"):
-        return TarSource(path)
+    file = open(path, "rb")
+    try:
+        return open_file_obj_source(file)
+    except ValueError as exc:
+        file.close()
+        raise ValueError(f"Unable to open {path}") from exc.__context__
+    except:
+        file.close()
+        raise
 
-    if suffixes and suffixes[-1] == ".zip":
-        return ZipSource(path)
 
-    raise ValueError(f"Unknown file type for {path.name}")
+def open_file_obj_source(file: IO[bytes]) -> abstract.Source:
+    """
+    Open a file object as a source
+
+    Supports both zip and tar.  You do not need to tell it which one, it will figure it out for you.
+
+    The caller is responsible for closing the source
+    :param file: An open file handle to a .zip or .tar.[|.gz|.bz2|.xz]
+    :return: A file source to read from that file
+    """
+    try:
+        file.seek(0, os.SEEK_SET)
+        return ZipSource(file)
+    except zipfile.BadZipfile as exc:
+        _logger.debug("Cannot open as zip: %s", str(exc))
+        try:
+            file.seek(0, os.SEEK_SET)
+            return TarSource(file)
+        except tarfile.ReadError as exc:
+            _logger.debug("Cannot open as zip: %s", str(exc))
+            raise ValueError("Cannot open as tar")
 
 
 def _path_from_url(url: str) -> Path:
