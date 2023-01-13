@@ -2,11 +2,11 @@ import contextlib
 import copy
 import json
 import logging
+import mimetypes
 import tempfile
 import urllib.parse
-from typing import IO, Iterable, NamedTuple, Optional
+from typing import IO, Iterable, NamedTuple, Optional, Union
 
-import mimetypes
 import boto3
 import botocore.exceptions
 
@@ -92,7 +92,7 @@ class S3TargetSession(abstract.TargetSession):
             self._deployment_spec.versions[version_id] = versions.DeploymentVersion(title=title)
         self._changed = True
 
-    def upload_file(self, version_id: str, filename: str, file_obj: IO[bytes]) -> None:
+    def upload_file(self, version_id: Union[str, type(...)], filename: str, file_obj: IO[bytes]) -> None:
         extra_args = {}
         mime_type, _ = mimetypes.guess_type(filename)
         if mime_type is not None:
@@ -109,7 +109,7 @@ class S3TargetSession(abstract.TargetSession):
         self._changed = True
 
 
-    def delete_file(self, version_id: str, filename: str) -> None:
+    def delete_file(self, version_id: Union[str, type(...)], filename: str) -> None:
         if not self._alias_or_version_exists(version_id):
             raise abstract.VersionNotFound(version_id)
         try:
@@ -146,7 +146,7 @@ class S3TargetSession(abstract.TargetSession):
         for file in self.iter_files(version_id=version_id):
             self.delete_file(version_id, file)
 
-    def download_file(self, version_id: str, filename: str) -> IO[bytes]:
+    def download_file(self, version_id: Union[str, type(...)], filename: str) -> IO[bytes]:
         if not self._alias_or_version_exists(version_id):
             raise abstract.VersionNotFound(version_id)
         try:
@@ -164,17 +164,19 @@ class S3TargetSession(abstract.TargetSession):
             for file in page.get('Contents', ()):
                 yield file['Key'][len(prefix):]
 
-    def set_alias(self, alias_id: str, alias: Optional[versions.DeploymentAlias]) -> None:
-        if alias is None:
-            try:
-                del self._deployment_spec.aliases[alias_id]
-                self._changed = True
-                self._clean_directory(alias_id)
-            except KeyError:
-                pass
+    def set_alias(self, alias_id: Union[str, type(...)], alias: Optional[versions.DeploymentAlias]) -> None:
+        if alias_id is ...:
+            self._deployment_spec.default_version = alias
         else:
-            self._deployment_spec.aliases[alias_id] = alias
-            self._changed = True
+            if alias is None:
+                try:
+                    del self._deployment_spec.aliases[alias_id]
+                    self._clean_directory(alias_id)
+                except KeyError:
+                    pass
+            else:
+                self._deployment_spec.aliases[alias_id] = alias
+        self._changed = True
 
     @property
     def available_redirect_mechanisms(self) -> dict[str, abstract.RedirectMechanism]:
@@ -184,10 +186,16 @@ class S3TargetSession(abstract.TargetSession):
     def deployment_spec(self) -> versions.DeploymentSpec:
         return copy.deepcopy(self._deployment_spec)
 
-    def _key_for(self, version_id: str, filename: str) -> str:
+    def _key_for(self, version_id: Union[str, type(...)], filename: str) -> str:
+        if version_id is ...:
+            if "/" in filename:
+                raise ValueError(f"filename must not contain '/' if version_id is ...: {filename}")
+            return filename
         return f"{self._prefix_key}{version_id}/{filename}"
 
-    def _alias_or_version_exists(self, version_id: str) -> bool:
+    def _alias_or_version_exists(self, version_id: Union[str, type(...)]) -> bool:
+        if version_id is ...:
+            return True
         return version_id in self._deployment_spec.versions or version_id in self._deployment_spec.aliases
 
 

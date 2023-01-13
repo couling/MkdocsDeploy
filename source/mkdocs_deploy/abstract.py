@@ -1,8 +1,8 @@
 import urllib.parse
 from abc import abstractmethod
-from typing import Callable, IO, Iterable, Optional, Protocol
+from typing import Callable, IO, Iterable, Optional, Protocol, Union
 
-from .versions import DeploymentSpec, DeploymentAlias
+from .versions import DeploymentAlias, DeploymentSpec
 
 
 class VersionNotFound(Exception):
@@ -78,20 +78,24 @@ class TargetSession(Protocol):
         """
 
     @abstractmethod
-    def upload_file(self, version_id: str, filename: str, file_obj: IO[bytes]) -> None:
+    def upload_file(self, version_id: Union[str, type(...)], filename: str, file_obj: IO[bytes]) -> None:
         """
         Upload a file to the target
-        :param version_id: The site version you wish to upload to.
+
+        :param version_id: The site version you wish to upload to.  If ``...`` then the file is uploaded to the root
+            not the site.  In that case filename must NOT contain ``/``
         :param filename: The filename of the file within the site version.
         :param file_obj: An open file handle to read data from.
         """
 
     @abstractmethod
-    def download_file(self, version_id: str, filename: str) -> IO[bytes]:
+    def download_file(self, version_id: Union[str, type(...)], filename: str) -> IO[bytes]:
         """
         Open a file handle to read content of a file
+
         :param version_id: The version for the site
-        :param filename: The filename within that version (not including version_id)
+        :param filename: The filename within that version.  If version_id is ``...`` then the file is downloaded from
+            the root of the site, not a version. In that case filename must NOT contain ``/``
         :return: An open file handle
         :raises FileNotFoundError: If the version did not contain the requested file
         :raises VersionNotFound: if the version_id did not exist
@@ -100,11 +104,12 @@ class TargetSession(Protocol):
 
 
     @abstractmethod
-    def delete_file(self, version_id: str, filename: str) -> None:
+    def delete_file(self, version_id: Union[str, type(...)], filename: str) -> None:
         """
         Delete a file, or mark it for deletion on close.
         :param version_id: The version to delete from
-        :param filename: The filename to delete
+        :param filename: The filename to delete with aversion. If version_id is ``...`` then the file is downloaded from
+            the root of the site, not a version. In that case filename must NOT contain ``/``
         """
 
     @abstractmethod
@@ -127,15 +132,15 @@ class TargetSession(Protocol):
         """
 
     @abstractmethod
-    def set_alias(self, alias_id: str, alias: Optional[DeploymentAlias]) -> None:
+    def set_alias(self, alias_id: Union[str, type(...)], alias: Optional[DeploymentAlias]) -> None:
         """
         Create or delete an alias.
 
         This only updates the meta information for the alias.  It does not apply redirect mechanisms.  The passed alias
         completely replaces any existing alias with the same ID.
 
-        :param alias_id: The alias ID.  If None is passed then the alias is deleted (if it existed).
-        :param alias: The specification of the alias
+        :param alias_id: The alias ID.  If ... is passed the default alias is modified.
+        :param alias: The specification of the alias. If None is passed then the alias is deleted (if it existed).
         """
 
     @property
@@ -179,31 +184,31 @@ class RedirectMechanism(Protocol):
     """
 
     @abstractmethod
-    def create_redirect(self, session: TargetSession, alias: str, version_id: str) -> None:
+    def create_redirect(self, session: TargetSession, alias: Union[str, type(...)], version_id: str) -> None:
         """
         Create a redirect
 
         :param session: The TargetSession to apply changes to
-        :param alias: The new alias to create.  If "" is passed, then a redirect from the root is created.  IE: ""
+        :param alias: The new alias to create.  If ``...`` is passed, then a redirect from the root is created.  IE: ""
         defines what the default version is.
         :param version_id: The version to redirect to.
         """
 
     @abstractmethod
-    def delete_redirect(self, session: TargetSession, alias: str) -> None:
+    def delete_redirect(self, session: TargetSession, alias: Union[str, type(...)]) -> None:
         """
         Delete the named redirect.
 
         :param session: The TargetSession to apply changes to
-        :param alias: The alias to delete
+        :param alias: The alias to delete. ``...`` is the default redirect.
         """
 
-    def refresh_redirect(self, session: TargetSession, alias: str, version_id: str) -> None:
+    def refresh_redirect(self, session: TargetSession, alias: Union[str, type(...)], version_id: str) -> None:
         """
         Called to ensure all redirects still work after a version has been altered.
 
         :param session: The TargetSession to apply changes to
-        :param alias: The alias to refresh
+        :param alias: The alias to refresh. ``...`` is the default redirect.
         :param version_id: The version to redirect to.
         """
         self.delete_redirect(session, alias)

@@ -1,7 +1,6 @@
-from typing import Iterable
+from typing import Iterable, Optional
 
 import pydantic
-
 
 DEPLOYMENTS_FILENAME = 'deployments.json'
 MIKE_VERSIONS_FILENAME = 'versions.json'
@@ -41,6 +40,7 @@ class DeploymentAlias(pydantic.BaseModel):
 
 
 class DeploymentSpec(pydantic.BaseModel):
+    default_version: Optional[DeploymentAlias] = None
     versions: dict[str, DeploymentVersion] = {}
     aliases: dict[str, DeploymentAlias] = {}
 

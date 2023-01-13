@@ -25,12 +25,16 @@ mkdocs-deploy ./site/ /media/my_site/all_versions 1.0
 This will work even if you previously `zip`ped or `tar`ed your
 
 ```shell
-mkdocs-deploy ./site.zip /media/my_site/all_versions 1.0
+mkdocs-deploy ./site.zip /media/my_site/all_versions 1.1
 ```
 
-You can also use URLs to specify paths, as lon
+You can also use URLs to specify paths, mkdocs-deploy supports S3 out of the box, others can be added by plugin.
+This will pull a built site zip (similar to above) from one S3 bucket and then push to another S3 bucket being used
+as a static website:
 
-
+```shell
+mkdocs-deploy s3://docs_archive_bucket/my_app_docs/1.2.zip s3://documentation.example.com/my_app_docs --alias latest
+```
 
 
 ## Built in support for

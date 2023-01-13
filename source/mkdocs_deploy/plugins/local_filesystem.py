@@ -160,14 +160,13 @@ class LocalFileTreeTargetSession(abstract.TargetSession):
             # I guess this decision might change if someone has a burning reason to start new every time.
             self._deployment_spec.versions[version_id].title = title
         self._changed = True
-        version_path = self._sanity_check_filename(self._target_path / version_id)
+        version_path = self._path_for_file(version_id)
         # Ensure the path is clean with no junk left behind for previous failure
         _recursive_delete(version_path)
         version_path.mkdir(parents=True, exist_ok=False)
 
-    def upload_file(self, version_id: str, filename: str, file_obj: IO[bytes]) -> None:
-        self._check_alias_or_version_exists(version_id)
-        target_path = self._sanity_check_filename(self._target_path / version_id / filename)
+    def upload_file(self, version_id: Union[str, type(...)], filename: str, file_obj: IO[bytes]) -> None:
+        target_path = self._path_for_file(version_id, filename)
         _logger.debug("Adding file %s", target_path)
         target_path.parent.mkdir(parents=True, exist_ok=True)
         self._changed = True
@@ -178,14 +177,8 @@ class LocalFileTreeTargetSession(abstract.TargetSession):
     def close(self, success: bool = False) -> None:
         if self._changed:
             for file_name, content in shared_implementations.generate_meta_data(self._deployment_spec).items():
-                with open(self._target_path / file_name, "wb") as file:
+                with open(self._path_for_file(..., file_name), "wb") as file:
                     file.write(content)
-
-    def _sanity_check_filename(self, child_path: Path) -> Path:
-        child_path = child_path.resolve()
-        if child_path.relative_to(self._target_path).parts[0] == "..":
-            raise ValueError(f"Refusing to operate on the site: {self._target_path} not in {child_path}")
-        return child_path
 
     def iter_files(self, version_id: str) -> Iterable[str]:
         def _iter_files(file_path: Path):
@@ -199,18 +192,15 @@ class LocalFileTreeTargetSession(abstract.TargetSession):
             except FileNotFoundError:
                 pass
 
-        self._check_alias_or_version_exists(version_id)
-        version_path = self._target_path / version_id
+        version_path = self._path_for_file(version_id)
 
         return _iter_files(version_path)
 
-    def download_file(self, version_id: str, filename: str) -> IO[bytes]:
-        self._check_alias_or_version_exists(version_id)
-        return open(self._target_path / version_id / filename, "rb")
+    def download_file(self, version_id: Union[str, type(...)], filename: str) -> IO[bytes]:
+        return open(self._path_for_file(version_id, filename), "rb")
 
-    def delete_file(self, version_id: str, filename: str) -> None:
-        self._check_alias_or_version_exists(version_id)
-        file_to_delete = (self._target_path / version_id / filename)
+    def delete_file(self, version_id: Union[str, type(...)], filename: str) -> None:
+        file_to_delete = self._path_for_file(version_id, filename)
         _logger.debug("unlink %s", file_to_delete)
         file_to_delete.unlink(missing_ok=True)
         self._changed = True
@@ -224,15 +214,18 @@ class LocalFileTreeTargetSession(abstract.TargetSession):
             else:
                 break
 
-    def set_alias(self, alias_id: str, alias: Optional[DeploymentAlias]) -> None:
-        if alias is None:
-            try:
-                del self._deployment_spec.aliases[alias_id]
-                _recursive_delete(self._target_path / alias_id)
-            except KeyError:
-                pass
+    def set_alias(self, alias_id: Union[str, type(...)], alias: Optional[DeploymentAlias]) -> None:
+        if alias_id is ...:
+            self._deployment_spec.default_version = alias
         else:
-            self._deployment_spec.aliases[alias_id] = alias
+            if alias is None:
+                try:
+                    del self._deployment_spec.aliases[alias_id]
+                    _recursive_delete(self._target_path / alias_id)
+                except KeyError:
+                    pass
+            else:
+                self._deployment_spec.aliases[alias_id] = alias
         self._changed = True
 
     @property
@@ -250,15 +243,26 @@ class LocalFileTreeTargetSession(abstract.TargetSession):
             if alias.version_id == version_id:
                 raise ValueError(f"Cannot delete a version while there are still aliases for it.  "
                                  f"Delete alias '{alias_id}' firs for version {version_id}")
-        _recursive_delete(self._target_path / version_id)
+        _recursive_delete(self._path_for_file(version_id))
         del self._deployment_spec.versions[version_id]
         self._changed = True
 
-    def _check_alias_or_version_exists(self, version_id: str) -> None:
-        if version_id not in self._deployment_spec.versions and version_id not in self._deployment_spec.aliases:
+    def _path_for_file(self, version_id: Union[str, type(...)], filename: str = "") -> Path:
+        if "\\" in filename:
+            raise ValueError("Cannot accept filenames containing \\")
+        if version_id is ...:
+            if "/" in filename:
+                raise ValueError(f"filename cannot contain '/' if version_id is ...: {filename}")
+            return self._target_path / filename
+        elif version_id not in self._deployment_spec.versions and version_id not in self._deployment_spec.aliases:
             raise abstract.VersionNotFound(version_id)
+        result = Path(self._target_path, *filename.split("/"))
+        if result.relative_to(self._target_path).parts[0] == "..":
+            raise ValueError(f"Refusing to operate on the site: {result} not in {self._target_path}")
 
-    def _check_version_exists(self, version_id: str) -> None:
+    def _check_version_exists(self, version_id: Union[str, type(...)]) -> None:
+        if version_id is ...:
+            return
         if version_id not in self._deployment_spec.versions:
             raise abstract.VersionNotFound(version_id)
 

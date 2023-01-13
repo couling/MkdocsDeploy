@@ -8,7 +8,7 @@ TargetSession.
 """
 import importlib.metadata
 import logging
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Union
 
 from .abstract import Source, TargetSession, VersionNotFound
 from .versions import DeploymentAlias
@@ -81,7 +81,9 @@ def delete_version(target: TargetSession, version_id: str) -> None:
 
 
 
-def create_alias(target: TargetSession, alias_id: str, version: str,  mechanism: Optional[str] = None) -> None:
+def create_alias(
+    target: TargetSession, alias_id: Union[str, type(...)], version: str,  mechanisms: Optional[Iterable[str]] = None
+) -> None:
     """
     Create a new alias for a version.
 
@@ -91,81 +93,106 @@ def create_alias(target: TargetSession, alias_id: str, version: str,  mechanism:
     :param target: The target session to create the alias on
     :param alias_id: The new alias id
     :param version: The version_id to point to
-    :param mechanism: The named mechanism to use.  If None then the target will choose the mechanism.
+    :param mechanisms: The named mechanisms to use.  If None then 'html' target will choose the mechanism.
     """
-    if mechanism is None:
-        mechanism = "html"
-    _logger.info("Creating %s alias redirect %s to %s", mechanism, alias_id, version)
-    available_redirect_mechanisms = target.available_redirect_mechanisms
-    existing_deployment_spec = target.deployment_spec
-    if mechanism not in available_redirect_mechanisms:
-        raise ValueError(f"LocalFileTreeTarget does not support redirect mechanism: {mechanism}")
-    if alias_id in existing_deployment_spec.versions:
+    deployment_spec = target.deployment_spec
+    if alias_id in deployment_spec.versions:
         raise ValueError(f"Cannot create an alias with the same name as an existing version. "
                          f"Delete the version first! Alias name: {alias_id}")
-    if alias_id in existing_deployment_spec.aliases:
-        alias = existing_deployment_spec.aliases[alias_id]
-        if alias.version_id != version:
-            for mechanism in alias.redirect_mechanisms:
-                if mechanism not in available_redirect_mechanisms:
+    if alias_id is ... and deployment_spec.default_version is not None:
+        alias = deployment_spec.default_version
+        if mechanisms is None:
+            mechanisms = alias.redirect_mechanisms
+    if alias_id in deployment_spec.aliases:
+        alias = deployment_spec.aliases[alias_id]
+        if mechanisms is None:
+            mechanisms = alias.redirect_mechanisms
+    else:
+        alias = DeploymentAlias(version_id=version, redirect_mechanisms=set())
+        if mechanisms is None:
+            mechanisms = ["html"]
+
+    available_redirect_mechanisms = target.available_redirect_mechanisms
+    for mechanism in mechanisms:
+        if mechanism not in available_redirect_mechanisms:
+            raise ValueError(f"LocalFileTreeTarget does not support redirect mechanism: {mechanism}")
+
+    _logger.info("Creating %s alias redirect %s to %s", ", ".join(mechanisms), alias_id, version)
+
+    # Remove any redirect mechanisms to a different version that we are not going to replace
+    if alias.version_id != version:
+        for mechanism in alias.redirect_mechanisms.copy():
+            if mechanism not in mechanisms:
+                try:
+                    available_redirect_mechanisms[mechanism].delete_redirect(target, alias_id)
+                except KeyError:
                     raise ValueError(f"LocalFileTreeTarget does not support redirect mechanism: {mechanism}.  "
                                      f"Unable to remove redirect for {alias_id}-->{alias.version_id}")
-                available_redirect_mechanisms[mechanism].delete_redirect(target, alias_id)
-            alias.version_id = version
-            alias.redirect_mechanisms.clear()
-        if mechanism not in alias.redirect_mechanisms:
-            available_redirect_mechanisms[mechanism].create_redirect(
-                session=target,
-                alias=alias_id,
-                version_id=version,
-            )
-            alias.redirect_mechanisms.add(mechanism)
-            target.set_alias(alias_id, alias)
+                alias.redirect_mechanisms.discard(mechanism)
+
+    # Create the redirects or refresh them to their new location.
+    for mechanism in mechanisms:
+        if mechanism in alias.redirect_mechanisms:
+            if alias.version_id != version:
+                available_redirect_mechanisms[mechanism].refresh_redirect(target, alias_id, version)
+            else:
+                _logger.debug("mechanism %s already in place, skipping", mechanism)
         else:
-            _logger.debug("mechanism %s already in place, skipping", mechanism)
-    else:
-        alias = DeploymentAlias(version_id=version, redirect_mechanisms={mechanism})
-        target.set_alias(alias_id, alias)
-        available_redirect_mechanisms[mechanism].create_redirect(
-            session=target,
-            alias=alias_id,
-            version_id=version,
-        )
+            available_redirect_mechanisms[mechanism].create_redirect(target, alias_id, version)
+            alias.redirect_mechanisms.add(mechanism)
+
+    target.set_alias(alias_id, alias)
 
 
-def delete_alias(target: TargetSession, alias_id: str, mechanisms: Optional[Iterable[str]] = None) -> None:
+def delete_alias(
+    target: TargetSession, alias_id: Union[str, type(...)], mechanisms: Optional[Iterable[str]] = None
+) -> None:
     """
     Delete an alias.
 
     If an iterable of mechanisms os passed, only those mechanisms will be deleted.  If that leaves no remaining
     mechanisms or no iterable is passed then the whole alias will be removed.
+
     :param target: The target to remove from
     :param alias_id: The alias to remove
     :param mechanisms: Optional iterable of mechanisms to remove.
     """
     _logger.info("Deleting alias %s mechanism %s", alias_id, "default" if mechanisms is None else list(mechanisms))
-    try:
-        alias = target.deployment_spec.aliases[alias_id]
-    except KeyError:
-        return
+    if alias_id is ...:
+        alias = target.deployment_spec.default_version
+        if alias is None:
+            _logger.debug("Default alias not set")
+            return
+    else:
+        try:
+            alias = target.deployment_spec.aliases[alias_id]
+        except KeyError:
+            _logger.debug("Alias %s not set, skipping", alias_id)
+            return
+
     if mechanisms is not None:
         to_delete = [mechanism for mechanism in mechanisms if mechanism in alias.redirect_mechanisms]
     else:
         to_delete = alias.redirect_mechanisms.copy()
     available_mechanisms = target.available_redirect_mechanisms
     for mechanism in to_delete:
-        available_mechanisms[mechanism].delete_redirect(
-            session=target,
-            alias=alias_id,
-        )
-        alias.redirect_mechanisms.discard(mechanism)
+        try:
+            available_mechanisms[mechanism].delete_redirect(
+                session=target,
+                alias=alias_id,
+            )
+            alias.redirect_mechanisms.discard(mechanism)
+        except KeyError:
+            raise ValueError("Mechanism %s not supported by target", mechanism)
     if alias.redirect_mechanisms:
         target.set_alias(alias_id, alias)
     else:
         target.set_alias(alias_id, None)
 
 
-def refresh_alias(target: TargetSession, alias_id: str, mechanisms: Optional[Iterable[str]] = None) -> None:
+def refresh_alias(
+    target: TargetSession, alias_id: Union[str, type(...)], mechanisms: Optional[Iterable[str]] = None
+) -> None:
     """
     Refresh redirects.
 
@@ -176,7 +203,12 @@ def refresh_alias(target: TargetSession, alias_id: str, mechanisms: Optional[Ite
     :param mechanisms: Optional list of mechanisms to refresh.  If None (default) all will be refreshed.
     """
     _logger.info("Refreshing alias %s mechanisms %s", alias_id, "all" if mechanisms is None else list(mechanisms))
-    alias = target.deployment_spec.aliases[alias_id]
+    if alias_id is ...:
+        alias = target.deployment_spec.default_version
+    else:
+        alias = target.deployment_spec.aliases.get(alias_id, None)
+    if alias is None:
+        _logger.warning("Cannot refresh alias %s, it doesn't exist", alias_id)
     if mechanisms is not None:
         to_refresh = [mechanism for mechanism in mechanisms if mechanism in alias.redirect_mechanisms]
     else:

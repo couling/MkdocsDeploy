@@ -13,7 +13,7 @@ _logger =logging.getLogger(__name__)
 
 _LOG_FORMAT = "%(levelname)s: %(message)s"
 _DEBUG_FORMAT = "%(levelname)s: %(name)s:  %(message)s"
-_ALIAS_TYPE = click.option(
+_REDIRECT_TYPE = click.option(
     "--redirect-type",
     "-m",
     help="The alias redirect type.  Default 'html' generating html files which themselves redirect to others."
@@ -44,8 +44,8 @@ def main(log_level: str):
 @click.argument("VERSION")
 @click.option("--alias", "-a", multiple=True, help="Alias for this version")
 @click.option("--title", "-t", help="A title for this version")
-@_ALIAS_TYPE
-def deploy_version(
+@_REDIRECT_TYPE
+def deploy(
     site: str, version: str, target_url: str, title:Optional[str], alias: tuple[str], redirect_type: tuple[str, ...]
 ):
     """
@@ -57,7 +57,6 @@ def deploy_version(
     TARGET_URL: Where the site is to be published excluding the version number
     """
     target = target_for_url(target_url=target_url)
-    redirect_type = redirect_type or None
     with ExitStack() as exit_stack:
         try:
             source = exit_stack.enter_context(source_for_url(source_url=site))
@@ -66,7 +65,12 @@ def deploy_version(
         target_session = exit_stack.enter_context(target.start_session())
         actions.upload(source=source, target=target_session, version_id=version, title=title)
         for _alias in alias:
-            actions.create_alias(target=target_session, alias_id=_alias, version=version, mechanism=redirect_type)
+            actions.create_alias(
+                target=target_session,
+                alias_id=_alias,
+                version=version,
+                mechanisms=redirect_type or None,
+            )
 
 
 @main.command()
@@ -83,19 +87,19 @@ def delete_version(version: str, target_url: str):
     with target.start_session() as target_session:
         actions.delete_version(target_session, version)
 
+
 @main.command()
 @click.argument("TARGET_URL")
 @click.argument("VERSION")
 @click.argument("ALIAS")
-@_ALIAS_TYPE
+@_REDIRECT_TYPE
 def set_alias(target_url: str, version: str, alias, redirect_type: tuple[str, ...]):
     """
     Set an alias for a specific version, or add a redirect type for that alias.
     """
     target = target_for_url(target_url=target_url)
-    redirect_type = redirect_type or None
     with target.start_session() as target_session:
-        actions.create_alias(target=target_session, alias_id=alias, version=version, mechanism=redirect_type)
+        actions.create_alias(target=target_session, alias_id=alias, version=version, mechanisms=redirect_type or None)
 
 
 @main.command()
@@ -121,24 +125,58 @@ def delete_alias(alias: Optional[str], target_url: str, redirect_type: tuple[str
     --
     """
     target = target_for_url(target_url=target_url)
-    if alias is not None:
-        alias_type = redirect_type or None
-        with target.start_session() as target_session:
-            actions.delete_alias(target=target_session, alias_id=alias, mechanisms=alias_type)
-    elif not all_aliases or not redirect_type:
-        raise click.ClickException("If ALIAS is not given both --all-aliases-for-type and --alias-type must be set")
-    else:
+    if all_aliases:
+        if alias is not None:
+            raise click.ClickException("Cannot specify an ALIAS and --all-aliases")
+        if not redirect_type:
+            raise click.ClickException("Must specify --redirect-type if --all-aliases is set")
         with target.start_session() as target_session:
             for alias_id, alias in target_session.deployment_spec.aliases.items():
                 matching_mechanisms = [_type for _type in redirect_type if _type in alias.redirect_mechanisms]
                 if matching_mechanisms:
                     actions.delete_alias(target=target_session, alias_id=alias_id, mechanisms=matching_mechanisms)
+    if alias is not None:
+        with target.start_session() as target_session:
+            actions.delete_alias(target=target_session, alias_id=alias, mechanisms=redirect_type or None)
+    else:
+        raise click.ClickException("If ALIAS is not given both --all-aliases and --alias-type must be set")
+
+
+@main.command()
+@click.argument("TARGET_URL")
+@click.argument("VERSION")
+@_REDIRECT_TYPE
+def set_default(target_url: str, version: str, redirect_type: tuple[str, ...]):
+    """
+    Set the default version or alias for your site.
+
+    This is very similar to an alias and makes use of redirect rules.
+    """
+    target = target_for_url(target_url=target_url)
+    with target.start_session() as target_session:
+        actions.create_alias(target_session, ..., version, redirect_type or None)
+
+
+@main.command()
+@click.argument("TARGET_URL")
+@click.argument("VERSION")
+@_REDIRECT_TYPE
+def clear_default(target_url: str, redirect_type: tuple[str, ...]):
+    """
+    Clear the default version or alias setting
+    for your site.
+
+    This is very similar to an alias and makes use of redirect rules.
+    """
+    target = target_for_url(target_url=target_url)
+    with target.start_session() as target_session:
+        actions.delete_alias(target_session, ..., redirect_type or None)
 
 
 @main.command()
 @click.argument("TARGET_URL")
 @click.option("--json", is_flag=True, help="Format as json")
-def describe_deployments(target_url: str, json: bool):
+def describe(target_url: str, json: bool):
     """
     Describe the current deployment setup of your software versions
 
@@ -149,6 +187,11 @@ def describe_deployments(target_url: str, json: bool):
             print(target_session.deployment_spec.json(sort_keys=True, indent=True))
         else:
             deployment_spec = target_session.deployment_spec
+            if deployment_spec.default_version is None:
+                print("⛔️ No default version")
+            else:
+                print(f"👋 Default version → {deployment_spec.default_version.version_id} "
+                      f"['{', '.join(deployment_spec.default_version.redirect_mechanisms)}']")
             for version_id, version in deployment_spec.versions.items():
                 print(f"📦 {version_id} - '{version.title}'")
             for alias_id, alias in deployment_spec.aliases.items():
