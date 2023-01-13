@@ -65,6 +65,7 @@ class S3TargetSession(abstract.TargetSession):
         self._seperator = seperator
         self._client = boto3.client("s3")
         self._deployment_spec = self._load_deployments()
+        self._changed = False
 
     def _load_deployments(self) -> versions.DeploymentSpec:
         try:
@@ -89,6 +90,7 @@ class S3TargetSession(abstract.TargetSession):
             self._deployment_spec.versions[version_id].title = title
         else:
             self._deployment_spec.versions[version_id] = versions.DeploymentVersion(title=title)
+        self._changed = True
 
     def upload_file(self, version_id: str, filename: str, file_obj: IO[bytes]) -> None:
         extra_args = {}
@@ -104,6 +106,7 @@ class S3TargetSession(abstract.TargetSession):
             self._key_for(version_id, filename),
             extra_args,
         )
+        self._changed = True
 
 
     def delete_file(self, version_id: str, filename: str) -> None:
@@ -115,20 +118,29 @@ class S3TargetSession(abstract.TargetSession):
             if exc.response['Error']['Code'] == 'NoSuchKey':
                 raise FileNotFoundError(self._key_for(version_id, filename)) from exc
             raise
+        self._changed = True
 
     def close(self, success: bool = False) -> None:
-        meta_data = shared_implementations.generate_meta_data(self._deployment_spec)
-        for filename, content in meta_data.items():
-            _logger.debug("Writing %s", filename)
-            self._client.put_object(
-                Bucket=self._bucket,
-                Key=self._prefix_key + filename,
-                Body=content,
-            )
+        if self._changed:
+            meta_data = shared_implementations.generate_meta_data(self._deployment_spec)
+            for filename, content in meta_data.items():
+                _logger.debug("Writing %s", filename)
+                self._client.put_object(
+                    Bucket=self._bucket,
+                    Key=self._prefix_key + filename,
+                    Body=content,
+                )
+        else:
+            _logger.debug("No changes, not writing meta")
 
     def delete_version(self, version_id: str) -> None:
-        if version_id not in self._deployment_spec.versions:
+        try:
+            del self._deployment_spec.versions[version_id]
+        except KeyError:
             raise abstract.VersionNotFound(version_id)
+        self._changed = True
+        self._clean_directory(version_id)
+
 
     def _clean_directory(self, version_id: str) -> None:
         for file in self.iter_files(version_id=version_id):
@@ -156,11 +168,13 @@ class S3TargetSession(abstract.TargetSession):
         if alias is None:
             try:
                 del self._deployment_spec.aliases[alias_id]
+                self._changed = True
                 self._clean_directory(alias_id)
             except KeyError:
                 pass
         else:
             self._deployment_spec.aliases[alias_id] = alias
+            self._changed = True
 
     @property
     def available_redirect_mechanisms(self) -> dict[str, abstract.RedirectMechanism]:

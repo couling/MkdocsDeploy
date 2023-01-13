@@ -146,6 +146,7 @@ class LocalFileTreeTargetSession(abstract.TargetSession):
         except FileNotFoundError:
             # TODO attempt to parse versions.json instead.
             self._deployment_spec = DeploymentSpec()
+        self._changed = False
 
     def start_version(self, version_id: str, title: str) -> None:
         if version_id in self._deployment_spec.aliases:
@@ -158,6 +159,7 @@ class LocalFileTreeTargetSession(abstract.TargetSession):
             # It seems pragmatic to roll over old meta.
             # I guess this decision might change if someone has a burning reason to start new every time.
             self._deployment_spec.versions[version_id].title = title
+        self._changed = True
         version_path = self._sanity_check_filename(self._target_path / version_id)
         # Ensure the path is clean with no junk left behind for previous failure
         _recursive_delete(version_path)
@@ -168,12 +170,13 @@ class LocalFileTreeTargetSession(abstract.TargetSession):
         target_path = self._sanity_check_filename(self._target_path / version_id / filename)
         _logger.debug("Adding file %s", target_path)
         target_path.parent.mkdir(parents=True, exist_ok=True)
+        self._changed = True
         with open(target_path, "wb") as target_file:
             while bytes_read := file_obj.read(102400):
                 target_file.write(bytes_read)
 
     def close(self, success: bool = False) -> None:
-        if success:
+        if self._changed:
             for file_name, content in shared_implementations.generate_meta_data(self._deployment_spec).items():
                 with open(self._target_path / file_name, "wb") as file:
                     file.write(content)
@@ -210,6 +213,7 @@ class LocalFileTreeTargetSession(abstract.TargetSession):
         file_to_delete = (self._target_path / version_id / filename)
         _logger.debug("unlink %s", file_to_delete)
         file_to_delete.unlink(missing_ok=True)
+        self._changed = True
         file_to_delete = file_to_delete.parent
         # Remove any empty directories this leaves
         while file_to_delete != self._target_path:
@@ -229,6 +233,7 @@ class LocalFileTreeTargetSession(abstract.TargetSession):
                 pass
         else:
             self._deployment_spec.aliases[alias_id] = alias
+        self._changed = True
 
     @property
     def available_redirect_mechanisms(self) -> dict[str, abstract.RedirectMechanism]:
@@ -247,6 +252,7 @@ class LocalFileTreeTargetSession(abstract.TargetSession):
                                  f"Delete alias '{alias_id}' firs for version {version_id}")
         _recursive_delete(self._target_path / version_id)
         del self._deployment_spec.versions[version_id]
+        self._changed = True
 
     def _check_alias_or_version_exists(self, version_id: str) -> None:
         if version_id not in self._deployment_spec.versions and version_id not in self._deployment_spec.aliases:
