@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "mkdocs-deploy"
-version = "0.1.0"
+version = "0.0.0"
 description = "Mkdocs versioning and deployment tool"
 authors = [
     "Philip Couling <couling@gmail.com>",
@@ -27,6 +27,12 @@ boto3 = "^1.26.45"
 "local" = "mkdocs_deploy.plugins.local_filesystem:enable_plugin"
 "s3" = "mkdocs_deploy.plugins.aws_s3:enable_plugin"
 
+[tool.poetry-dynamic-versioning]
+enable = true
+vcs = "git"
+style = "semver"
+bump = true
+
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning"]
+build-backend = "poetry_dynamic_versioning.backend"
