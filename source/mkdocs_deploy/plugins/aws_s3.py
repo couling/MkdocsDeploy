@@ -190,7 +190,7 @@ class S3TargetSession(abstract.TargetSession):
         if version_id is ...:
             if "/" in filename:
                 raise ValueError(f"filename must not contain '/' if version_id is ...: {filename}")
-            return filename
+            return self._prefix_key + filename
         return f"{self._prefix_key}{version_id}/{filename}"
 
     def _alias_or_version_exists(self, version_id: Union[str, type(...)]) -> bool:

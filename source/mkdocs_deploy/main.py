@@ -52,8 +52,10 @@ def deploy(
     Deploy a version of your documentation
 
     SITE: The built site to publish. This will have been created with mkdocs build
-          This built site may optionally be zipped or a tar file
+    This built site may optionally be zipped or a tar file
+
     VERSION: The version number to deploy as.
+
     TARGET_URL: Where the site is to be published excluding the version number
     """
     target = target_for_url(target_url=target_url)
@@ -159,7 +161,6 @@ def set_default(target_url: str, version: str, redirect_type: tuple[str, ...]):
 
 @main.command()
 @click.argument("TARGET_URL")
-@click.argument("VERSION")
 @_REDIRECT_TYPE
 def clear_default(target_url: str, redirect_type: tuple[str, ...]):
     """
