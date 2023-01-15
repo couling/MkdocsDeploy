@@ -20,12 +20,17 @@ pydantic = "^1.10.4"
 click = "^8.0"
 boto3 = "^1.26.45"
 
+
 [tool.poetry.plugins."mkdocs.plugins"]
 "mkdocs-deploy" = "mkdocs_deploy.mkdocs_plugin:MkdocsDeploy"
 
 [tool.poetry.plugins."mkdocs_deploy.plugins"]
 "local" = "mkdocs_deploy.plugins.local_filesystem:enable_plugin"
 "s3" = "mkdocs_deploy.plugins.aws_s3:enable_plugin"
+
+
+[tool.poetry.group.dev.dependencies]
+build = "^0.10.0"
 
 [tool.poetry-dynamic-versioning]
 enable = true

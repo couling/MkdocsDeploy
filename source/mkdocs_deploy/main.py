@@ -95,7 +95,7 @@ def delete_version(version: str, target_url: str):
 @click.argument("VERSION")
 @click.argument("ALIAS")
 @_REDIRECT_TYPE
-def set_alias(target_url: str, version: str, alias, redirect_type: tuple[str, ...]):
+def set_alias(target_url: str, version: str, alias: str, redirect_type: tuple[str, ...]):
     """
     Set an alias for a specific version, or add a redirect type for that alias.
     """

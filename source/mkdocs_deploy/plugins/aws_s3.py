@@ -165,6 +165,7 @@ class S3TargetSession(abstract.TargetSession):
                 yield file['Key'][len(prefix):]
 
     def set_alias(self, alias_id: Union[str, type(...)], alias: Optional[versions.DeploymentAlias]) -> None:
+        alias = copy.deepcopy(alias)
         if alias_id is ...:
             self._deployment_spec.default_version = alias
         else:

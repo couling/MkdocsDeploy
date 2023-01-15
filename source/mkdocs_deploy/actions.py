@@ -95,11 +95,21 @@ def create_alias(
     :param version: The version_id to point to
     :param mechanisms: The named mechanisms to use.  If None then 'html' target will choose the mechanism.
     """
+    # Check if the given mechanisms can be implemented by this target
+    available_redirect_mechanisms = target.available_redirect_mechanisms
+    if mechanisms is not None:
+        for mechanism in mechanisms:
+            if mechanism not in available_redirect_mechanisms:
+                raise ValueError(f"LocalFileTreeTarget does not support redirect mechanism: {mechanism}")
+
+    # Check if the alias already exists ...
+    # If mechanisms wasn't spefied use whatever is on the existing one.
     deployment_spec = target.deployment_spec
     if alias_id in deployment_spec.versions:
         raise ValueError(f"Cannot create an alias with the same name as an existing version. "
                          f"Delete the version first! Alias name: {alias_id}")
     if alias_id is ... and deployment_spec.default_version is not None:
+        # This is the "default" alias
         alias = deployment_spec.default_version
         if mechanisms is None:
             mechanisms = alias.redirect_mechanisms
@@ -108,17 +118,14 @@ def create_alias(
         if mechanisms is None:
             mechanisms = alias.redirect_mechanisms
     else:
+        # No existing alias was found. Make a new one.
         alias = DeploymentAlias(version_id=version, redirect_mechanisms=set())
+        target.set_alias(alias_id, alias)
+        # Must set the alias first or creating the mechanism will fail.
         if mechanisms is None:
             mechanisms = ["html"]
 
-    available_redirect_mechanisms = target.available_redirect_mechanisms
-    for mechanism in mechanisms:
-        if mechanism not in available_redirect_mechanisms:
-            raise ValueError(f"LocalFileTreeTarget does not support redirect mechanism: {mechanism}")
-
     _logger.info("Creating %s alias redirect %s to %s", ", ".join(mechanisms), alias_id, version)
-
     # Remove any redirect mechanisms to a different version that we are not going to replace
     if alias.version_id != version:
         for mechanism in alias.redirect_mechanisms.copy():
