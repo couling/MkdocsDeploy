@@ -136,6 +136,7 @@ def create_alias(
                     raise ValueError(f"LocalFileTreeTarget does not support redirect mechanism: {mechanism}.  "
                                      f"Unable to remove redirect for {alias_id}-->{alias.version_id}")
                 alias.redirect_mechanisms.discard(mechanism)
+        alias.version_id = version
 
     # Create the redirects or refresh them to their new location.
     for mechanism in mechanisms:
