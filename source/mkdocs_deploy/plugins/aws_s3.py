@@ -134,13 +134,11 @@ class S3TargetSession(abstract.TargetSession):
             _logger.debug("No changes, not writing meta")
 
     def delete_version(self, version_id: str) -> None:
-        try:
-            del self._deployment_spec.versions[version_id]
-        except KeyError:
+        if version_id not in self._deployment_spec.versions:
             raise abstract.VersionNotFound(version_id)
         self._changed = True
         self._clean_directory(version_id)
-
+        del self._deployment_spec.versions[version_id]
 
     def _clean_directory(self, version_id: str) -> None:
         for file in self.iter_files(version_id=version_id):
