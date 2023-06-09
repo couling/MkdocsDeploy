@@ -1,7 +1,6 @@
+import glob
 import json
 import logging
-import glob
-from functools import cached_property
 from pathlib import Path
 from typing import Callable, NamedTuple, Optional
 
@@ -34,31 +33,32 @@ class MkdocsDeployConfig(pydantic.BaseModel):
     deploy_url: Optional[str] = None
     """URL to deploy to"""
 
-    default_aliases: list[str] = []
+    default_aliases: list[str] = ["latest"]
     """List of aliases to add if none specified"""
 
     redirect_mechanisms: list[str] = ["html"]
     """List of alias types to use if not otherwise specified"""
 
-    #class Configuration:
-    #    validate_assignment = True
+    _effective_built_site: Optional[str] = None
 
     @property
     def effective_built_site(self) -> Optional[str]:
         """Evaluates built_site and build_site_pattern to find the built site"""
-        if self.built_site_pattern is not None:
-            file_paths = sorted(
-                glob.glob(
-                    self.built_site_pattern,
-                    root_dir=self.config_base_dir,
-                    recursive=True,
-                    include_hidden=False,
+        if self._effective_built_site is None:
+            if self.built_site_pattern is not None:
+                file_paths = sorted(
+                    glob.glob(
+                        self.built_site_pattern,
+                        root_dir=self.config_base_dir,
+                        recursive=True,
+                        include_hidden=False,
+                    )
                 )
-            )
-            if file_paths:
-                return file_paths[0]
-            return None
-        return self.built_site
+                if file_paths:
+                    self._effective_built_site = file_paths[0]
+            else:
+                self._effective_built_site = self.built_site
+        return self._effective_built_site
 
 
 class ConfigurationSource(NamedTuple):

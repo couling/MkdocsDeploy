@@ -8,8 +8,9 @@ website.
 
 ## Basic Usage (Getting Started)
 
-Mkdocs deploy does not trigger building your site.  You must do this manually first.  This will build your static site
-in directory named `site`:
+Start by [configuring your project](configuration)
+
+Build your project with mkdocs.
 
 ```shell
 mkdocs build
@@ -18,24 +19,40 @@ mkdocs build
 To deploy this site somewhere (let's say version `1.0` will live locally at `/media/my_site/all_versions/1.0`):
 
 ```shell
-# Notice the space between all_versions and 1.0.
-mkdocs-deploy ./site/ /media/my_site/all_versions 1.0
+mkdocs-deploy deploy 1.0
 ```
 
-This will work even if you previously `zip`ped or `tar`ed your
+You can give each version a name that might appear in your theme:
+```shell
+mkdocs-deploy deploy 1.0 "First Version"
+```
+
+You can add extra aliases. Eg: make `1.x` forward to `1.0`.  Aliases can always be set to something different.
 
 ```shell
-mkdocs-deploy ./site.zip /media/my_site/all_versions 1.1
+mkdocs-deploy set-alias 1.0 1.x
 ```
 
-You can also use URLs to specify paths, mkdocs-deploy supports S3 out of the box, others can be added by plugin.
-This will pull a built site zip (similar to above) from one S3 bucket and then push to another S3 bucket being used
-as a static website:
+Aliases can be set implicitly every time you deploy a new version.  Unless otherwise configured every deployment 
+implicitly replaces the `latest` alias.
+
+## Setting up a new project
+
+[Configure mkdocs-deploy in your project](configuration). Then...
 
 ```shell
-mkdocs-deploy s3://docs_archive_bucket/my_app_docs/1.2.zip s3://documentation.example.com/my_app_docs --alias latest
-```
+# Deploy your first version
+mkdocs-deploy deploy "1.0"
 
+# If make sure you have at least one "latest".
+mkdocs-deploy set-alias 1.0 latest 
+
+# Set the default version for your site. Setting it to alias means it will change when latest changes
+mkdocs-deploy set-
+```
+- Deploy your first version.
+- Set a `latest` version
+- Set a default version, in most cases this should be `latest`
 
 ## Built in support for
 
@@ -57,7 +74,9 @@ mkdocs-deploy s3://docs_archive_bucket/my_app_docs/1.2.zip s3://documentation.ex
 
 ### Through mike compatibility
 
-To enable your [material][material] themed mkdocs to understand mkdocs-deploy versioning ad the following section to 
+The [Material](https://squidfunk.github.io/mkdocs-material/) is compatible with versioning by `mkdocs-deploy`
+
+To enable your [material][material] themed mkdocs to understand mkdocs-deploy versioning add the following section to 
 your `mkdocs.yaml` file.
 
 ```yaml
@@ -80,15 +99,14 @@ Mkdocs-deploy generates a mike compatible file which themese can use named `vers
 
 ### Making your own theme mkdocs-deploy aware
 
-mkdocs-deploy has an additional json file describing versions.
-
-You can make your theme aware of which versions are installed and which aliases for them.
+You can either use the [mike formatted versions.json](https://github.com/jimporter/mike#for-theme-authors) or you can 
+use mkdocs-deploy formatted deployments.json:
 
 ```json
 {
    "versions": {
       "1.0": {
-         "title": "1.0"
+         "title": "First Release"
       }
    }, 
    "aliases": {
@@ -100,10 +118,12 @@ You can make your theme aware of which versions are installed and which aliases 
 }
 ```
 
-_This may be extended in the future._
+Note that this may be extended in future but mkdocks-deploy will endevour to ensure at least these keys are present.
+The `redirect_mechanisms` available will depend on plugins installed and proboally should be ignored by theme
+developers.
 
 
-## If mike exists, why mkdocs-deploy
+## If mike exists, why mkdocs-deploy?
 
 [mike] is very good if you are looking for a simple too for deploying multiple versions of docs to github pages
 from the command line.
@@ -111,8 +131,8 @@ from the command line.
 mkdocs-deploy was designed to fill in a few places where mike is weaker:
  - Easier to work with best-practice CI pipeline
    - Does not require working on two branches at the same time
-   - Separates build from deployment
- - Better suited to maintaining sites other than GithubPages
+   - Separates build from deployment / publishing
+ - Better suited to maintaining sites other than Github Pages
  - _(Future enhancement)_ Better suited to gitops
  - Plugable designed to allow better integration with other tools
 
