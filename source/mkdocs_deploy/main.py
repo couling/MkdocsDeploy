@@ -1,31 +1,45 @@
 import logging
+import sys
 from contextlib import ExitStack
+from pathlib import Path
 from typing import Optional
 
 import click
-import sys
+import pydantic.json
+import yaml
 
 from . import actions
 from .abstract import source_for_url, target_for_url
+from .configuration import MkdocsDeployConfig, find_configuration, load_configuration
 
 _logger =logging.getLogger(__name__)
+
+# https://github.com/python/cpython/blob/7b21108445969398f6d1db9234fc0fe727565d2e/Lib/json/encoder.py#L78
+JSONABLE_TYPES = (dict, list, tuple, str, int, float, bool, type(None))
 
 
 _LOG_FORMAT = "%(levelname)s: %(message)s"
 _DEBUG_FORMAT = "%(levelname)s: %(name)s:  %(message)s"
-_REDIRECT_TYPE = click.option(
-    "--redirect-type",
-    "-m",
-    help="The alias redirect type.  Default 'html' generating html files which themselves redirect to others."
-)
 _LOG_LEVEL_NAMES = [name for name, val in logging._nameToLevel.items() if val]
 
 
 @click.group()
+@click.option(
+    "--config-file",
+    help="Configuration file. If not specified, one will be searched for starting in CWD and working up",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
+)
 @click.option("--log-level", help=f"Set log level. Valid values are {', '.join(_LOG_LEVEL_NAMES)}", default="INFO")
-def main(log_level: str):
+@click.option("--built-site", help="URL or file path to the built site - output from mkdocs")
+@click.option("--built-site-pattern", help="Glob pattern for a file path to the built site. Replaces --built-site-url")
+@click.option("--deploy-url", help="URL to deploy to")
+@click.option("--redirect-mechanisms", help="Coma seperated list of alias mechanisms. Defaults to just 'html'")
+def main(log_level: str, config_file: Optional[Path], **overrides):
     """
     Version aware Mkdocs deployment tool.
+
+    Options can override configuration files.  Configuration can be found in any of "mkdocs-deploy.json",
+    "mkdocs-deploy.yaml, or pyproject.toml".
     """
     numeric_level = logging.getLevelName(log_level)
     if not isinstance(numeric_level, int):
@@ -36,32 +50,40 @@ def main(log_level: str):
         format=_LOG_FORMAT if numeric_level >= logging.INFO else _DEBUG_FORMAT,
     )
     actions.load_plugins()
+    if config_file is not None:
+        config = click.get_current_context().obj = load_configuration(config_path=config_file)
+    else:
+        config = click.get_current_context().obj = find_configuration()
+    for name, value in overrides.items():
+        if value is not None:
+            if name == "redirect_mechanisms":
+                value = value.split(",")
+            setattr(config, name, value)
+    if config.deploy_url is None:
+        raise click.ClickException("No deployment URL set")
 
 
 @main.command()
-@click.argument("TARGET_URL")
-@click.argument("SITE")
 @click.argument("VERSION")
-@click.option("--alias", "-a", multiple=True, help="Alias for this version")
+@click.argument("TITLE", required=False)
+@click.option("--alias", "-a", multiple=True, help="Additional alias for this version")
+@click.option("--no-default-alias", is_flag=True, help="Do not add the default alias from config file")
 @click.option("--title", "-t", help="A title for this version")
-@_REDIRECT_TYPE
-def deploy(
-    site: str, version: str, target_url: str, title:Optional[str], alias: tuple[str], redirect_type: tuple[str, ...]
-):
+def deploy(version: str, title:Optional[str], alias: tuple[str]):
     """
     Deploy a version of your documentation
 
-    SITE: The built site to publish. This will have been created with mkdocs build
-    This built site may optionally be zipped or a tar file
-
     VERSION: The version number to deploy as.
 
-    TARGET_URL: Where the site is to be published excluding the version number
+    TITLE: A name to give this version. If not set will default to VERSION
     """
-    target = target_for_url(target_url=target_url)
+    config: MkdocsDeployConfig = click.get_current_context().obj
+    if config.effective_built_site is None:
+        raise click.ClickException(f"No built site {'set' if config.built_site_pattern is None else 'found'}")
+    target = target_for_url(target_url=config.effective_built_site)
     with ExitStack() as exit_stack:
         try:
-            source = exit_stack.enter_context(source_for_url(source_url=site))
+            source = exit_stack.enter_context(source_for_url(source_url=config.effective_built_site))
         except FileNotFoundError as exc:
             raise click.ClickException(str(exc))
         target_session = exit_stack.enter_context(target.start_session())
@@ -71,50 +93,46 @@ def deploy(
                 target=target_session,
                 alias_id=_alias,
                 version=version,
-                mechanisms=redirect_type or None,
+                mechanisms=config.redirect_mechanisms,
             )
 
 
 @main.command()
-@click.argument("TARGET_URL")
 @click.argument("VERSION")
-def delete_version(version: str, target_url: str):
+def delete_version(version: str):
     """
     Delete a version of your documentation and all aliases pointing to it.
 
     VERSION: The version number to deploy as.
-    TARGET_URL: Where the site is to be published excluding the version number
     """
-    target = target_for_url(target_url=target_url)
+    config: MkdocsDeployConfig = click.get_current_context().obj
+    target = target_for_url(target_url=config.deploy_url)
     with target.start_session() as target_session:
         actions.delete_version(target_session, version)
 
 
 @main.command()
-@click.argument("TARGET_URL")
 @click.argument("VERSION")
 @click.argument("ALIAS")
-@_REDIRECT_TYPE
-def set_alias(target_url: str, version: str, alias: str, redirect_type: tuple[str, ...]):
+def set_alias(version: str, alias: str):
     """
     Set an alias for a specific version, or add a redirect type for that alias.
     """
-    target = target_for_url(target_url=target_url)
+    config: MkdocsDeployConfig = click.get_current_context().obj
+    target = target_for_url(target_url=config.deploy_url)
     with target.start_session() as target_session:
-        actions.create_alias(target=target_session, alias_id=alias, version=version, mechanisms=redirect_type or None)
+        actions.create_alias(
+            target=target_session,
+            alias_id=alias,
+            version=version,
+            mechanisms=config.redirect_mechanisms,
+        )
 
 
 @main.command()
-@click.argument("TARGET_URL")
 @click.argument("ALIAS", required=False)
-@click.option(
-    "--all-aliases",
-    is_flag=True,
-    help="Delete all redirects for aliases of a specific alias types. "
-         "--alias-type must be specified at least once and ALIAS must not be given as an argument."
-)
-@click.option("--redirect-type", "-m", help="The alias redirect mechanism.")
-def delete_alias(alias: Optional[str], target_url: str, redirect_type: tuple[str, ...], all_aliases: bool):
+@click.option("--all-redirects-type", help="Delete all redirects for aliases of a specific alias type.")
+def delete_alias(alias: Optional[str], all_redirects_type: Optional[str]):
     """
     Delete an alias or single redirection type.
 
@@ -124,68 +142,64 @@ def delete_alias(alias: Optional[str], target_url: str, redirect_type: tuple[str
     meta references to the alias will only be removed if it leaves no remaining redirects.
 
     --all-aliases Exists for preparation of site moves.
-    --
     """
-    target = target_for_url(target_url=target_url)
-    if all_aliases:
+    config: MkdocsDeployConfig = click.get_current_context().obj
+    target = target_for_url(target_url=config.deploy_url)
+    if all_redirects_type is not None:
         if alias is not None:
             raise click.ClickException("Cannot specify an ALIAS and --all-aliases")
-        if not redirect_type:
-            raise click.ClickException("Must specify --redirect-type if --all-aliases is set")
         with target.start_session() as target_session:
             for alias_id, alias in target_session.deployment_spec.aliases.items():
-                matching_mechanisms = [_type for _type in redirect_type if _type in alias.redirect_mechanisms]
+                matching_mechanisms = [_type for _type in all_redirects_type if _type in alias.redirect_mechanisms]
                 if matching_mechanisms:
                     actions.delete_alias(target=target_session, alias_id=alias_id, mechanisms=matching_mechanisms)
     if alias is not None:
         with target.start_session() as target_session:
-            actions.delete_alias(target=target_session, alias_id=alias, mechanisms=redirect_type or None)
+            actions.delete_alias(target=target_session, alias_id=alias, mechanisms=None)
     else:
-        raise click.ClickException("If ALIAS is not given both --all-aliases and --alias-type must be set")
+        raise click.ClickException("If ALIAS is not given both --all-redirects-type must be set")
 
 
 @main.command()
-@click.argument("TARGET_URL")
 @click.argument("VERSION")
-@_REDIRECT_TYPE
-def set_default(target_url: str, version: str, redirect_type: tuple[str, ...]):
+def set_default(version: str):
     """
     Set the default version or alias for your site.
 
     This is very similar to an alias and makes use of redirect rules.
     """
-    target = target_for_url(target_url=target_url)
+    config: MkdocsDeployConfig = click.get_current_context().obj
+    target = target_for_url(target_url=config.deploy_url)
     with target.start_session() as target_session:
-        actions.create_alias(target_session, ..., version, redirect_type or None)
+        actions.create_alias(target_session, ..., version, config.redirect_mechanisms)
 
 
 @main.command()
-@click.argument("TARGET_URL")
-@_REDIRECT_TYPE
-def clear_default(target_url: str, redirect_type: tuple[str, ...]):
+def unset_default():
     """
-    Clear the default version or alias setting
-    for your site.
+    Clear the default version or alias setting for your site.
 
     This is very similar to an alias and makes use of redirect rules.
     """
-    target = target_for_url(target_url=target_url)
+    config: MkdocsDeployConfig = click.get_current_context().obj
+    target = target_for_url(target_url=config.deploy_url)
     with target.start_session() as target_session:
-        actions.delete_alias(target_session, ..., redirect_type or None)
+        actions.delete_alias(target_session, ..., None)
 
 
 @main.command()
-@click.argument("TARGET_URL")
-@click.option("--json", is_flag=True, help="Format as json")
-def describe(target_url: str, json: bool):
+@click.option("--out-format", type=click.Choice(["plain", "json"]), help="Output format")
+def describe(out_format: str):
     """
     Describe the current deployment setup of your software versions
-
     """
-    target = target_for_url(target_url=target_url)
+    config: MkdocsDeployConfig = click.get_current_context().obj
+    target = target_for_url(target_url=config.deploy_url)
     with target.start_session() as target_session:
-        if json:
+        if out_format == "json":
             print(target_session.deployment_spec.json(sort_keys=True, indent=True))
+        if out_format == "yaml":
+            yaml.safe_dump(to_jsonable_dict(target_session.deployment_spec.dict()), stream=sys.stdout)
         else:
             deployment_spec = target_session.deployment_spec
             if deployment_spec.default_version is None:
@@ -197,3 +211,24 @@ def describe(target_url: str, json: bool):
                 print(f"📦 {version_id} - '{version.title}'")
             for alias_id, alias in deployment_spec.aliases.items():
                 print(f"🔗 {alias_id} → {version_id} ['{', '.join(alias.redirect_mechanisms)}']")
+
+
+@main.command()
+def show_config():
+    """
+    Show the effective config after applying overrides and setting defaults
+    """
+    config: MkdocsDeployConfig = click.get_current_context().obj
+    yaml.safe_dump(to_jsonable_dict(config.dict()), stream=sys.stdout)
+
+# https://github.com/pydantic/pydantic/issues/1409#issuecomment-877175194
+def to_jsonable_dict(obj):
+    if isinstance(obj, dict):
+        return {key: to_jsonable_dict(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [to_jsonable_dict(value) for value in obj]
+    elif isinstance(obj, tuple):
+        return tuple(to_jsonable_dict(value) for value in obj)
+    elif isinstance(obj, JSONABLE_TYPES):
+        return obj
+    return pydantic.json.pydantic_encoder(obj)

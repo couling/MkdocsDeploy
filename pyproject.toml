@@ -19,6 +19,8 @@ python = "^3.8"
 pydantic = "^1.10.4"
 click = "^8.0"
 boto3 = "^1.26.45"
+toml = "^0.10.2"
+pyyaml = "^6.0"
 
 
 [tool.poetry.plugins."mkdocs.plugins"]
