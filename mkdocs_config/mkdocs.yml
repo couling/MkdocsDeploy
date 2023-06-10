@@ -1,0 +1,51 @@
+site_name: Mkdocs Deploy
+docs_dir: ../docs
+site_dir: ../dist/mkdocs_site
+
+# gives a link on each documentation page directly to edit that page in GitHub!
+repo_url: https://github.com/HabitatEnergy/MkdocsDeploy
+repo_name: "mkdocs-deploy on GitHub"
+edit_uri: edit/development/docs/
+
+# Enable the theme "Material"
+theme:
+  name: "material"
+  custom_dir: "overrides"
+  features:
+    - content.action.edit
+    - navigation.tracking
+    - navigation.sections
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+plugins:
+  - search
+  - gen-files:
+      scripts:
+      - gen_ref_pages.py
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            heading_level: 2
+            show_source: false
+            show_submodules: true
+          selection:
+            docstring_style: sphinx
+
+watch:
+  - ../docs
+  - ../source/mkdocs_deploy
+
+extra:
+  version:
+    provider: mike

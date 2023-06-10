@@ -1,12 +1,11 @@
+import click
 import logging
+import pydantic.json
 import sys
+import yaml
 from contextlib import ExitStack
 from pathlib import Path
 from typing import Optional
-
-import click
-import pydantic.json
-import yaml
 
 from . import actions
 from .abstract import source_for_url, target_for_url

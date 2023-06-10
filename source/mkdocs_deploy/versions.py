@@ -1,6 +1,5 @@
-from typing import Iterable, Optional
-
 import pydantic
+from typing import Iterable, Optional
 
 DEPLOYMENTS_FILENAME = 'deployments.json'
 MIKE_VERSIONS_FILENAME = 'versions.json'

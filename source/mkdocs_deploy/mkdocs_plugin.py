@@ -1,12 +1,11 @@
 """
-Written but currently not used in the codebase.
+Not used currently. Please Ignore.
 """
-from pathlib import Path
-from urllib.parse import urlparse
-
 import mkdocs.config.base
 import mkdocs.config.config_options
 import mkdocs.plugins
+from pathlib import Path
+from urllib.parse import urlparse
 
 _CONFIG_EXTENSIONS = ("mkdocs.yaml", "mkdocs.yml")
 

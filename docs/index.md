@@ -97,10 +97,9 @@ Mkdocs-deploy generates a mike compatible file which themese can use named `vers
 ]
 ```
 
-### Making your own theme mkdocs-deploy aware
+### Through mkdocs-deploy compatibility
 
-You can either use the [mike formatted versions.json](https://github.com/jimporter/mike#for-theme-authors) or you can 
-use mkdocs-deploy formatted deployments.json:
+mkdocs-deploy maintains a file `deployments.json`:
 
 ```json
 {

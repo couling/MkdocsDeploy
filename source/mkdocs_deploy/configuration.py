@@ -1,12 +1,11 @@
 import glob
 import json
 import logging
-from pathlib import Path
-from typing import Callable, NamedTuple, Optional
-
 import pydantic
 import toml
 import yaml
+from pathlib import Path
+from typing import Callable, NamedTuple, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +18,7 @@ class MkdocsDeployConfig(pydantic.BaseModel):
     built_site: Optional[str] = None
     """Fixed url where to find the built mkdocs site ready to deploy
     
-    One of ``build_url`` and ``build_pattern`` may be specified not both.
+    One of ``built_site`` and ``build_pattern`` may be specified not both.
     
     This can be just a local path without ``file:///```"""
 
@@ -55,7 +54,7 @@ class MkdocsDeployConfig(pydantic.BaseModel):
                     )
                 )
                 if file_paths:
-                    self._effective_built_site = file_paths[0]
+                    self._effective_built_site = file_paths[-1]
             else:
                 self._effective_built_site = self.built_site
         return self._effective_built_site
@@ -119,6 +118,8 @@ def _load_json_file(file_path: Path) -> dict:
     with open(file_path, "r") as file:
         return json.load(file)
 
+
+# TODO Implement loading config from mkdocs
 
 _configuration_sources: list[ConfigurationSource] = [
     ConfigurationSource("mkdocs-deploy.json", _load_json_file),
