@@ -12,7 +12,4 @@ website.
 
 ## Author
 
-Mkdocs-deploy was developed by Philip Couling while working at [Habitat Energy](https://www.habitat.energy/)
-
-![Habitatenergy Logo](https://www.habitat.energy/wp-content/uploads/2021/09/Habitat-Logo.svg)
-
+Mkdocs-deploy was developed by Philip Couling while working at [Habitat Energy](https://www.habitat.energy/).
