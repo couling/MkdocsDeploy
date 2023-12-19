@@ -18,9 +18,9 @@ mkdocs-deploy = 'mkdocs_deploy.main:main'
 python = "^3.8"
 pydantic = "^1.10.4"
 click = "^8.0"
-boto3 = "^1.26.45"
-toml = "^0.10.2"
-pyyaml = "^6.0"
+boto3 = ">=1.26.45"
+toml = ">=0.10.2"
+pyyaml = ">=6.0"
 
 [tool.poetry.group.docs.dependencies]
 mkdocs = "^1.4.2"
