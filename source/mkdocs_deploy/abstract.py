@@ -39,6 +39,7 @@ class Source(Protocol):
         """
         Close any underlying resource handles
         """
+        return None
 
     def __enter__(self):
         """
@@ -78,7 +79,7 @@ class TargetSession(Protocol):
         """
 
     @abstractmethod
-    def upload_file(self, version_id: Union[str, type(...)], filename: str, file_obj: IO[bytes]) -> None:
+    def upload_file(self, version_id: str | None, filename: str, file_obj: IO[bytes]) -> None:
         """
         Upload a file to the target
 
@@ -89,7 +90,7 @@ class TargetSession(Protocol):
         """
 
     @abstractmethod
-    def download_file(self, version_id: Union[str, type(...)], filename: str) -> IO[bytes]:
+    def download_file(self, version_id: str | None, filename: str) -> IO[bytes]:
         """
         Open a file handle to read content of a file
 
@@ -104,7 +105,7 @@ class TargetSession(Protocol):
 
 
     @abstractmethod
-    def delete_file(self, version_id: Union[str, type(...)], filename: str) -> None:
+    def delete_file(self, version_id: str | None, filename: str) -> None:
         """
         Delete a file, or mark it for deletion on close.
         :param version_id: The version to delete from
@@ -132,7 +133,7 @@ class TargetSession(Protocol):
         """
 
     @abstractmethod
-    def set_alias(self, alias_id: Union[str, type(...)], alias: Optional[DeploymentAlias]) -> None:
+    def set_alias(self, alias_id: str | None, alias: Optional[DeploymentAlias]) -> None:
         """
         Create or delete an alias.
 

@@ -103,7 +103,7 @@ def create_alias(
                 raise ValueError(f"LocalFileTreeTarget does not support redirect mechanism: {mechanism}")
 
     # Check if the alias already exists ...
-    # If mechanisms wasn't spefied use whatever is on the existing one.
+    # If mechanisms wasn't specified use whatever is on the existing one.
     deployment_spec = target.deployment_spec
     if alias_id in deployment_spec.versions:
         raise ValueError(f"Cannot create an alias with the same name as an existing version. "
