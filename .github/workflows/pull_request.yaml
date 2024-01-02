@@ -21,7 +21,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: poetry
 
-      - name: Install
+      - name: Install Project and Test Dependencies
         run: poetry install --only test,main
 
       - name: Pytest
