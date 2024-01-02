@@ -22,7 +22,7 @@ jobs:
           cache: poetry
 
       - name: Install
-        run: poetry install --only test,man
+        run: poetry install --only test,main
 
       - name: Pytest
         run: poetry run pytest
