@@ -15,7 +15,7 @@ packages = [
 mkdocs-deploy = 'mkdocs_deploy.main:main'
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.9"
 pydantic = "^1.10.4"
 click = "^8.0"
 boto3 = ">=1.26.45"
@@ -28,6 +28,11 @@ mkdocstrings = "^0.21.2"
 mkdocstrings-python = "^0.9.0"
 mkdocs-gen-files = "^0.4.0"
 mkdocs-material = "^9.1"
+
+
+[tool.poetry.group.test.dependencies]
+pytest = "^7.4.4"
+mypy = "^1.8.0"
 
 [tool.poetry.plugins."mkdocs.plugins"]
 "mkdocs-deploy" = "mkdocs_deploy.mkdocs_plugin:MkdocsDeploy"
@@ -51,3 +56,8 @@ build-backend = "poetry_dynamic_versioning.backend"
 
 [tool.mkdocs-deploy]
 built_site = "dist/mkdocs_site"
+
+[tool.pytest.ini_options]
+testpaths = [
+    "source/tests",
+]
