@@ -1,5 +1,4 @@
 from typing import Any, NamedTuple, TypeVar
-from copy import deepcopy
 
 _T = TypeVar("_T")
 
