@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "mkdocs-deploy"
-version = "0.0.0"
+version = "0.0.0"  # Version set automatically in CI Pipeline.
 description = "Mkdocs versioning and deployment tool"
 authors = [
     "Philip Couling <couling@gmail.com>",
