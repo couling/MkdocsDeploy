@@ -28,7 +28,7 @@ class DeploymentVersion(pydantic.BaseModel):
 
     @pydantic.root_validator()
     def _default_title(cls, values: dict):
-        if values["title"] is None:
+        if values.get("title", None) is None:
             values["title"] = values["version_id"]
         return values
 
