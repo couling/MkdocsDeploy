@@ -8,9 +8,9 @@ TargetSession.
 """
 import importlib.metadata
 import logging
-from typing import Iterable, Optional, Union
+from typing import Iterable, Optional
 
-from .abstract import Source, TargetSession, VersionNotFound
+from .abstract import DEFAULT_VERSION, Source, TargetSession, Version, VersionNotFound
 from .versions import DeploymentAlias
 
 _logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ def load_plugins() -> None:
 
 
 
-def upload(source: Source, target: TargetSession, version_id: str, title: Optional[str]) -> None:
+def upload(source: Source, target: TargetSession, version_id: str, title: str | None) -> None:
     """
     Upload a file (to s3)
     :param source: The site to upload.  This may be a directory, or it may be zipped
@@ -82,7 +82,7 @@ def delete_version(target: TargetSession, version_id: str) -> None:
 
 
 def create_alias(
-    target: TargetSession, alias_id: Union[str, type(...)], version: str,  mechanisms: Optional[Iterable[str]] = None
+    target: TargetSession, alias_id: Version, version: str,  mechanisms: Iterable[str] | None = None
 ) -> None:
     """
     Create a new alias for a version.
@@ -103,7 +103,7 @@ def create_alias(
                 raise ValueError(f"LocalFileTreeTarget does not support redirect mechanism: {mechanism}")
 
     # Check if the alias already exists ...
-    # If mechanisms wasn't spefied use whatever is on the existing one.
+    # If mechanisms wasn't specified use whatever is on the existing one.
     deployment_spec = target.deployment_spec
     if alias_id in deployment_spec.versions:
         raise ValueError(f"Cannot create an alias with the same name as an existing version. "
@@ -152,9 +152,7 @@ def create_alias(
     target.set_alias(alias_id, alias)
 
 
-def delete_alias(
-    target: TargetSession, alias_id: Union[str, type(...)], mechanisms: Optional[Iterable[str]] = None
-) -> None:
+def delete_alias(target: TargetSession, alias_id: Version, mechanisms: Iterable[str] | None = None) -> None:
     """
     Delete an alias.
 
@@ -166,7 +164,7 @@ def delete_alias(
     :param mechanisms: Optional iterable of mechanisms to remove.
     """
     _logger.info("Deleting alias %s mechanism %s", alias_id, "default" if mechanisms is None else list(mechanisms))
-    if alias_id is ...:
+    if alias_id is DEFAULT_VERSION:
         alias = target.deployment_spec.default_version
         if alias is None:
             _logger.debug("Default alias not set")
@@ -198,9 +196,7 @@ def delete_alias(
         target.set_alias(alias_id, None)
 
 
-def refresh_alias(
-    target: TargetSession, alias_id: Union[str, type(...)], mechanisms: Optional[Iterable[str]] = None
-) -> None:
+def refresh_alias(target: TargetSession, alias_id: Version, mechanisms: Iterable[str] | None = None) -> None:
     """
     Refresh redirects.
 
@@ -211,14 +207,15 @@ def refresh_alias(
     :param mechanisms: Optional list of mechanisms to refresh.  If None (default) all will be refreshed.
     """
     _logger.info("Refreshing alias %s mechanisms %s", alias_id, "all" if mechanisms is None else list(mechanisms))
-    if alias_id is ...:
+    if alias_id is DEFAULT_VERSION:
         alias = target.deployment_spec.default_version
     else:
         alias = target.deployment_spec.aliases.get(alias_id, None)
     if alias is None:
         _logger.warning("Cannot refresh alias %s, it doesn't exist", alias_id)
+        return
     if mechanisms is not None:
-        to_refresh = [mechanism for mechanism in mechanisms if mechanism in alias.redirect_mechanisms]
+        to_refresh = {mechanism for mechanism in mechanisms if mechanism in alias.redirect_mechanisms}
     else:
         to_refresh = alias.redirect_mechanisms
     available_mechanisms = target.available_redirect_mechanisms

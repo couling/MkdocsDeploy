@@ -55,6 +55,7 @@ class TarSource(abstract.Source):
             self._tar_file = tarfile.open(name=file_path, mode="r")
         else:
             self._tar_file = tarfile.open(fileobj=file_path, mode="r")
+        self._file_path = file_path
 
     def iter_files(self) -> Iterable[str]:
         for file in self._tar_file.getmembers():
@@ -62,7 +63,9 @@ class TarSource(abstract.Source):
                 yield file.name[len(self._prefix):]
 
     def open_file_for_read(self, filename: str) -> IO[bytes]:
-        return self._tar_file.extractfile(self._prefix + filename)
+        result = self._tar_file.extractfile(self._prefix + filename)
+        if result is None:
+            raise RuntimeError(f"Requested file is not a regular file: {filename} in {self._file_path}")
 
     def close(self):
         self._tar_file.close()
@@ -131,10 +134,9 @@ def open_file_obj_source(file: IO[bytes]) -> abstract.Source:
 
 
 def _path_from_url(url: str) -> Path:
-    url = urllib.parse.urlparse(url)
-    if url.path.startswith("/"):
-        return Path(url.path[1:])
-    return Path(url.path)
+    if "://" in url:
+        return Path((url.path or "")[1:])
+    return Path(url)
 
 
 class LocalFileTreeTargetSession(abstract.TargetSession):
@@ -179,7 +181,8 @@ class LocalFileTreeTargetSession(abstract.TargetSession):
             for file_name, content in shared_implementations.generate_meta_data(self._deployment_spec).items():
                 with open(self._path_for_file(..., file_name), "wb") as file:
                     file.write(content)
-
+# PosixPath('/Users/philip/Documents/Development/MkdocsDeploy/private/var/folders/nb/9f9993hs2yg3gjs966_ltd8c0000gn/T/pytest-of-philip/pytest-16/test_upload0/mock_target')
+# PosixPath('/Users/philip/Documents/Development/MkdocsDeploy/private/var/folders/nb/9f9993hs2yg3gjs966_ltd8c0000gn/T/pytest-of-philip/pytest-16/test_upload0/mock_target/deployments.json')
     def iter_files(self, version_id: str) -> Iterable[str]:
         def _iter_files(file_path: Path):
             try:
@@ -257,8 +260,9 @@ class LocalFileTreeTargetSession(abstract.TargetSession):
         elif version_id not in self._deployment_spec.versions and version_id not in self._deployment_spec.aliases:
             raise abstract.VersionNotFound(version_id)
         result = Path(self._target_path, *filename.split("/"))
-        if result.relative_to(self._target_path).parts[0] == "..":
-            raise ValueError(f"Refusing to operate on the site: {result} not in {self._target_path}")
+        # Raise a ValueError if the result is above the base path
+        result.relative_to(self._target_path)
+        return result
 
     def _check_version_exists(self, version_id: Union[str, type(...)]) -> None:
         if version_id is ...:

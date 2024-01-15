@@ -1,6 +1,7 @@
 import urllib.parse
 from abc import abstractmethod
-from typing import Callable, IO, Iterable, Optional, Protocol, Union
+from enum import Enum
+from typing import Callable, IO, Iterable, Optional, Protocol
 
 from .versions import DeploymentAlias, DeploymentSpec
 
@@ -11,6 +12,16 @@ class VersionNotFound(Exception):
 
 class RedirectMechanismNotFound(Exception):
     pass
+
+
+class _DefaultVersionType(Enum):
+    DEFAULT_VERSION = 0
+
+
+DEFAULT_VERSION = _DefaultVersionType.DEFAULT_VERSION
+
+
+Version = str | _DefaultVersionType
 
 
 class Source(Protocol):
@@ -39,6 +50,7 @@ class Source(Protocol):
         """
         Close any underlying resource handles
         """
+        return None
 
     def __enter__(self):
         """
@@ -78,7 +90,7 @@ class TargetSession(Protocol):
         """
 
     @abstractmethod
-    def upload_file(self, version_id: Union[str, type(...)], filename: str, file_obj: IO[bytes]) -> None:
+    def upload_file(self, version_id: Version, filename: str, file_obj: IO[bytes]) -> None:
         """
         Upload a file to the target
 
@@ -89,7 +101,7 @@ class TargetSession(Protocol):
         """
 
     @abstractmethod
-    def download_file(self, version_id: Union[str, type(...)], filename: str) -> IO[bytes]:
+    def download_file(self, version_id: Version, filename: str) -> IO[bytes]:
         """
         Open a file handle to read content of a file
 
@@ -104,7 +116,7 @@ class TargetSession(Protocol):
 
 
     @abstractmethod
-    def delete_file(self, version_id: Union[str, type(...)], filename: str) -> None:
+    def delete_file(self, version_id: Version, filename: str) -> None:
         """
         Delete a file, or mark it for deletion on close.
         :param version_id: The version to delete from
@@ -132,7 +144,7 @@ class TargetSession(Protocol):
         """
 
     @abstractmethod
-    def set_alias(self, alias_id: Union[str, type(...)], alias: Optional[DeploymentAlias]) -> None:
+    def set_alias(self, alias_id: Version, alias: Optional[DeploymentAlias]) -> None:
         """
         Create or delete an alias.
 
@@ -184,18 +196,18 @@ class RedirectMechanism(Protocol):
     """
 
     @abstractmethod
-    def create_redirect(self, session: TargetSession, alias: Union[str, type(...)], version_id: str) -> None:
+    def create_redirect(self, session: TargetSession, alias: Version, version_id: str) -> None:
         """
         Create a redirect
 
         :param session: The TargetSession to apply changes to
-        :param alias: The new alias to create.  If ``...`` is passed, then a redirect from the root is created.  IE: ""
+        :param alias: The new alias to create.  If ``None`` is passed, then a redirect from the root is created.  IE: ""
         defines what the default version is.
         :param version_id: The version to redirect to.
         """
 
     @abstractmethod
-    def delete_redirect(self, session: TargetSession, alias: Union[str, type(...)]) -> None:
+    def delete_redirect(self, session: TargetSession, alias:Version) -> None:
         """
         Delete the named redirect.
 
@@ -203,7 +215,7 @@ class RedirectMechanism(Protocol):
         :param alias: The alias to delete. ``...`` is the default redirect.
         """
 
-    def refresh_redirect(self, session: TargetSession, alias: Union[str, type(...)], version_id: str) -> None:
+    def refresh_redirect(self, session: TargetSession, alias: Version, version_id: str) -> None:
         """
         Called to ensure all redirects still work after a version has been altered.
 
