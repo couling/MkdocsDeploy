@@ -19,7 +19,10 @@ jobs:
           cache: poetry
 
       - name: Set Project Version
-        run: poetry version ${{github.ref}}
+        shell: bash
+        run: |
+          version_ref="${{github.ref}}"
+          poetry version "${version_ref#refs/tags/}"
 
       - name: Build
         run: poetry build
