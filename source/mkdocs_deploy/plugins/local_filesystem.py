@@ -10,8 +10,6 @@ from typing import IO, Iterable, Optional, Union
 from .. import abstract, shared_implementations
 from ..versions import DeploymentAlias, DeploymentSpec, DeploymentVersion
 
-LOCAL_FILE_REDIRECT_MECHANISMS = shared_implementations.SHARED_REDIRECT_MECHANISMS.copy()
-
 _logger = logging.getLogger(__name__)
 
 
@@ -66,6 +64,7 @@ class TarSource(abstract.Source):
         result = self._tar_file.extractfile(self._prefix + filename)
         if result is None:
             raise RuntimeError(f"Requested file is not a regular file: {filename} in {self._file_path}")
+        return result
 
     def close(self):
         self._tar_file.close()
@@ -233,8 +232,7 @@ class LocalFileTreeTargetSession(abstract.TargetSession):
 
     @property
     def available_redirect_mechanisms(self) -> dict[str, abstract.RedirectMechanism]:
-        return LOCAL_FILE_REDIRECT_MECHANISMS.copy()
-
+        return {}
 
     @property
     def deployment_spec(self) -> DeploymentSpec:

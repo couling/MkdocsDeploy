@@ -31,10 +31,18 @@ class MockSource(abstract.Source):
 class MockRedirectMechanism(abstract.RedirectMechanism):
 
     def create_redirect(self, session: TargetSession, alias: Version, version_id: str) -> None:
-        pass
+        if alias is abstract.DEFAULT_VERSION:
+            if session.deployment_spec.default_version is None:
+                raise RuntimeError("Some plugins might not accept creating a redirect if the version doesn't exist")
+        elif alias not in session.deployment_spec.aliases:
+            raise RuntimeError("Some plugins might not accept creating a redirect if the version doesn't exist")
 
     def delete_redirect(self, session: TargetSession, alias: Version) -> None:
-        pass
+        if alias is abstract.DEFAULT_VERSION:
+            if session.deployment_spec.default_version is None:
+                raise RuntimeError("Some plugins might not accept deleting a redirect if the version doesn't exist")
+        elif alias not in session.deployment_spec.aliases:
+            raise RuntimeError("Some plugins might not accept deleting a redirect if the version doesn't exist")
 
 
 class MockTargetSession(abstract.TargetSession):
@@ -42,14 +50,12 @@ class MockTargetSession(abstract.TargetSession):
     internal_deployment_spec: abstract.DeploymentSpec
     closed: bool = False
     close_success: bool = False
-    aliases: dict[Version, versions.DeploymentAlias]
     redirect_mechanisms: dict[str, abstract.RedirectMechanism] = {'mock': MockRedirectMechanism()}
 
     def __init__(self):
         self.files = {}
         self.deleted_files = set()
         self.internal_deployment_spec = abstract.DeploymentSpec()
-        self.aliases = {}
         self.redirect_mechanisms = self.redirect_mechanisms.copy()
 
     def start_version(self, version_id: str, title: str) -> None:
@@ -57,7 +63,10 @@ class MockTargetSession(abstract.TargetSession):
 
     def delete_version(self, version_id: str) -> None:
         existing_files = [f for v, f in self.files.keys() if v == version_id]
-        del self.internal_deployment_spec.versions[version_id]
+        try:
+            del self.internal_deployment_spec.versions[version_id]
+        except KeyError:
+            raise abstract.VersionNotFound()
         for file in existing_files:
             del self.files[(version_id, file)]
 
@@ -86,14 +95,15 @@ class MockTargetSession(abstract.TargetSession):
         self.close_success = success
 
     def set_alias(self, alias_id: Version, alias: DeploymentAlias | None) -> None:
-        if alias is None:
-            del self.aliases[alias_id]
-            return
-        self.aliases[alias_id] = deepcopy(alias)
+        if alias is not None:
+            alias = deepcopy(alias)
         if alias_id is abstract.DEFAULT_VERSION:
-            self.internal_deployment_spec.default_version = self.aliases[alias_id]
+            self.internal_deployment_spec.default_version = alias
         else:
-            self.internal_deployment_spec.aliases[alias_id] = self.aliases[alias_id]
+            if alias is not None:
+                self.internal_deployment_spec.aliases[alias_id] = alias
+            else:
+                del self.internal_deployment_spec.aliases[alias_id]
 
     @property
     def available_redirect_mechanisms(self) -> dict[str, abstract.RedirectMechanism]:

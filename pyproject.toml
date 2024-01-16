@@ -40,6 +40,7 @@ mypy = "^1.8.0"
 [tool.poetry.plugins."mkdocs_deploy.plugins"]
 "local" = "mkdocs_deploy.plugins.local_filesystem:enable_plugin"
 "s3" = "mkdocs_deploy.plugins.aws_s3:enable_plugin"
+"html-redirect" = "mkdocs_deploy.plugins.html_redirect:enable_plugin"
 
 [tool.poetry.group.dev.dependencies]
 build = "^0.10.0"

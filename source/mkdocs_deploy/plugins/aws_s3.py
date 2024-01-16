@@ -18,10 +18,6 @@ logging.getLogger("botocore").setLevel("INFO")
 logging.getLogger("s3transfer").setLevel("INFO")
 
 
-AWS_S3_REDIRECT_MECHANISMS = shared_implementations.SHARED_REDIRECT_MECHANISMS.copy()
-# TODO add S3 redirect
-
-
 def enable_plugin() -> None:
     """
     Enables the plugin.
@@ -179,7 +175,9 @@ class S3TargetSession(abstract.TargetSession):
 
     @property
     def available_redirect_mechanisms(self) -> dict[str, abstract.RedirectMechanism]:
-        return AWS_S3_REDIRECT_MECHANISMS.copy()
+        # TODO add S3 redirect
+        # TODO cloud front redirect rules
+        return {}
 
     @property
     def deployment_spec(self) -> versions.DeploymentSpec:
