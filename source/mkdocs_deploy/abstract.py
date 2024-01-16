@@ -17,6 +17,9 @@ class RedirectMechanismNotFound(Exception):
 class _DefaultVersionType(Enum):
     DEFAULT_VERSION = 0
 
+    def __repr__(self) -> str:
+        return self.name
+
 
 DEFAULT_VERSION = _DefaultVersionType.DEFAULT_VERSION
 
@@ -269,3 +272,27 @@ def target_for_url(target_url: str) -> Target:
     """
     handler = _TARGETS[urllib.parse.urlparse(target_url).scheme]
     return handler(target_url)
+
+
+_SHARED_REDIRECT_MECHANISMS: dict[str, RedirectMechanism] = {}
+
+
+def get_redirect_mechanisms(session: TargetSession) -> dict[str, RedirectMechanism]:
+    """Get all available redirect mechanisms for a target session
+
+    Unlike the property returned by the target session itself, this will also include shared redirect mechanisms.
+    """
+    result = _SHARED_REDIRECT_MECHANISMS.copy()
+    result.update(session.available_redirect_mechanisms)
+    return result
+
+
+def register_shared_redirect_mechanism(mechanism_key: str, mechanism: RedirectMechanism) -> None:
+    """Register a redirect mechanism which can work with any target type from any plugin.
+
+    DO NOT use this to simply add a mechanism to your own plugin.  The target session should return mechanisms that
+    only work on that target.
+
+    There are believed to be very few of these: html is the only inbuilt mechanism.  This can work with any target
+    because it only generates html files and all target types support uploading html files."""
+    _SHARED_REDIRECT_MECHANISMS[mechanism_key] = mechanism

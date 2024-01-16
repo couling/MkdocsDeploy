@@ -8,9 +8,9 @@ TargetSession.
 """
 import importlib.metadata
 import logging
-from typing import Iterable, Optional
+from typing import Collection
 
-from .abstract import DEFAULT_VERSION, Source, TargetSession, Version, VersionNotFound
+from .abstract import DEFAULT_VERSION, Source, TargetSession, Version, VersionNotFound, get_redirect_mechanisms
 from .versions import DeploymentAlias
 
 _logger = logging.getLogger(__name__)
@@ -71,6 +71,8 @@ def delete_version(target: TargetSession, version_id: str) -> None:
     :param version_id:
     """
     deployment_spec = target.deployment_spec
+    if deployment_spec.default_version is not None and deployment_spec.default_version.version_id == version_id:
+        delete_alias(target, DEFAULT_VERSION)
     for alias_id in deployment_spec.aliases_for_version(version_id):
         delete_alias(target, alias_id)
     _logger.info("Deleting version %s", version_id)
@@ -82,7 +84,7 @@ def delete_version(target: TargetSession, version_id: str) -> None:
 
 
 def create_alias(
-    target: TargetSession, alias_id: Version, version: str,  mechanisms: Iterable[str] | None = None
+    target: TargetSession, alias_id: Version, version: str,  mechanisms: Collection[str] | None = None
 ) -> None:
     """
     Create a new alias for a version.
@@ -93,14 +95,14 @@ def create_alias(
     :param target: The target session to create the alias on
     :param alias_id: The new alias id
     :param version: The version_id to point to
-    :param mechanisms: The named mechanisms to use.  If None then 'html' target will choose the mechanism.
+    :param mechanisms: The named mechanisms to use.  If None then all available mechanisms will be used.
     """
     # Check if the given mechanisms can be implemented by this target
-    available_redirect_mechanisms = target.available_redirect_mechanisms
+    available_redirect_mechanisms = get_redirect_mechanisms(target)
     if mechanisms is not None:
         for mechanism in mechanisms:
             if mechanism not in available_redirect_mechanisms:
-                raise ValueError(f"LocalFileTreeTarget does not support redirect mechanism: {mechanism}")
+                raise ValueError(f"{type(TargetSession).__name__} does not support redirect mechanism: {mechanism}")
 
     # Check if the alias already exists ...
     # If mechanisms wasn't specified use whatever is on the existing one.
@@ -108,51 +110,53 @@ def create_alias(
     if alias_id in deployment_spec.versions:
         raise ValueError(f"Cannot create an alias with the same name as an existing version. "
                          f"Delete the version first! Alias name: {alias_id}")
-    if alias_id is ... and deployment_spec.default_version is not None:
+    if alias_id is DEFAULT_VERSION and deployment_spec.default_version is not None:
         # This is the "default" alias
         alias = deployment_spec.default_version
-        if mechanisms is None:
-            mechanisms = alias.redirect_mechanisms
-    if alias_id in deployment_spec.aliases:
+    elif alias_id in deployment_spec.aliases:
         alias = deployment_spec.aliases[alias_id]
-        if mechanisms is None:
-            mechanisms = alias.redirect_mechanisms
     else:
         # No existing alias was found. Make a new one.
         alias = DeploymentAlias(version_id=version, redirect_mechanisms=set())
         target.set_alias(alias_id, alias)
-        # Must set the alias first or creating the mechanism will fail.
-        if mechanisms is None:
-            mechanisms = ["html"]
+
+    if mechanisms is None:
+        mechanisms = available_redirect_mechanisms.keys()
 
     _logger.info("Creating %s alias redirect %s to %s", ", ".join(mechanisms), alias_id, version)
     # Remove any redirect mechanisms to a different version that we are not going to replace
-    if alias.version_id != version:
-        for mechanism in alias.redirect_mechanisms.copy():
-            if mechanism not in mechanisms:
-                try:
-                    available_redirect_mechanisms[mechanism].delete_redirect(target, alias_id)
-                except KeyError:
-                    raise ValueError(f"LocalFileTreeTarget does not support redirect mechanism: {mechanism}.  "
-                                     f"Unable to remove redirect for {alias_id}-->{alias.version_id}")
-                alias.redirect_mechanisms.discard(mechanism)
-        alias.version_id = version
+    for mechanism in alias.redirect_mechanisms.copy():
+        if mechanism not in mechanisms:
+            try:
+                _logger.warning(
+                    "Implicitly deleting redirect %s mechanism %s to %s", alias_id, mechanism, alias.version_id
+                )
+                available_redirect_mechanisms[mechanism].delete_redirect(target, alias_id)
+            except KeyError:
+                raise ValueError(
+                    f"{type(TargetSession).__name__} does not support redirect mechanism: {mechanism}. "
+                    f"Unable to remove redirect for {alias_id}-->{alias.version_id}"
+                )
+            alias.redirect_mechanisms.discard(mechanism)
 
     # Create the redirects or refresh them to their new location.
     for mechanism in mechanisms:
         if mechanism in alias.redirect_mechanisms:
             if alias.version_id != version:
+                _logger.debug("Modifying %s mechanism %s from %s to %s", alias_id, mechanism, alias.version_id, version)
                 available_redirect_mechanisms[mechanism].refresh_redirect(target, alias_id, version)
             else:
                 _logger.debug("mechanism %s already in place, skipping", mechanism)
         else:
+            _logger.debug("Creating %s mechanism %s to %s", alias_id, mechanism, version)
             available_redirect_mechanisms[mechanism].create_redirect(target, alias_id, version)
             alias.redirect_mechanisms.add(mechanism)
 
+    alias.version_id = version
     target.set_alias(alias_id, alias)
 
 
-def delete_alias(target: TargetSession, alias_id: Version, mechanisms: Iterable[str] | None = None) -> None:
+def delete_alias(target: TargetSession, alias_id: Version, mechanisms: Collection[str] | None = None) -> None:
     """
     Delete an alias.
 
@@ -167,20 +171,20 @@ def delete_alias(target: TargetSession, alias_id: Version, mechanisms: Iterable[
     if alias_id is DEFAULT_VERSION:
         alias = target.deployment_spec.default_version
         if alias is None:
-            _logger.debug("Default alias not set")
+            _logger.warning("Cannot delete default alias as it is not set")
             return
     else:
         try:
             alias = target.deployment_spec.aliases[alias_id]
         except KeyError:
-            _logger.debug("Alias %s not set, skipping", alias_id)
+            _logger.warning("Cannot delete alias %s not set, it has not been set", alias_id)
             return
 
     if mechanisms is not None:
-        to_delete = [mechanism for mechanism in mechanisms if mechanism in alias.redirect_mechanisms]
+        to_delete: list | set = [mechanism for mechanism in mechanisms if mechanism in alias.redirect_mechanisms]
     else:
         to_delete = alias.redirect_mechanisms.copy()
-    available_mechanisms = target.available_redirect_mechanisms
+    available_mechanisms = get_redirect_mechanisms(target)
     for mechanism in to_delete:
         try:
             available_mechanisms[mechanism].delete_redirect(
@@ -196,7 +200,7 @@ def delete_alias(target: TargetSession, alias_id: Version, mechanisms: Iterable[
         target.set_alias(alias_id, None)
 
 
-def refresh_alias(target: TargetSession, alias_id: Version, mechanisms: Iterable[str] | None = None) -> None:
+def refresh_alias(target: TargetSession, alias_id: Version, mechanisms: Collection[str] | None = None) -> None:
     """
     Refresh redirects.
 
@@ -218,7 +222,7 @@ def refresh_alias(target: TargetSession, alias_id: Version, mechanisms: Iterable
         to_refresh = {mechanism for mechanism in mechanisms if mechanism in alias.redirect_mechanisms}
     else:
         to_refresh = alias.redirect_mechanisms
-    available_mechanisms = target.available_redirect_mechanisms
+    available_mechanisms = get_redirect_mechanisms(target)
     for mechanism in to_refresh:
         available_mechanisms[mechanism].refresh_redirect(
             session=target,

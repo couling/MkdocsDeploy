@@ -1,4 +1,5 @@
 from typing import Any, NamedTuple, TypeVar
+from copy import deepcopy
 
 _T = TypeVar("_T")
 
@@ -38,5 +39,5 @@ class _MockWrapper:
         return setattr(self._wrapped, key, value)
 
     def __call__(self, *args, **kwargs):
-        self._method_calls.append(MethodCall(self._name, args, kwargs))
+        self._method_calls.append(MethodCall(self._name, deepcopy(args), deepcopy(kwargs)))
         return self._wrapped(*args, **kwargs)
