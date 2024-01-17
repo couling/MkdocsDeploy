@@ -70,22 +70,27 @@ class MockTargetSession(abstract.TargetSession):
         for file in existing_files:
             del self.files[(version_id, file)]
 
-    def upload_file(self, version_id: Version, filename: str, file_obj: IO[bytes]) -> None:
-        if version_id not in self.internal_deployment_spec.versions:
+    def _check_version_exists(self, version_id: Version) -> None:
+        if version_id is abstract.DEFAULT_VERSION:
+            return
+        if (version_id not in self.internal_deployment_spec.versions
+                and version_id not in self.internal_deployment_spec.aliases):
             raise abstract.VersionNotFound(version_id)
+
+    def upload_file(self, version_id: Version, filename: str, file_obj: IO[bytes]) -> None:
+        self._check_version_exists(version_id)
         self.files[(version_id, filename)] = file_obj.read()
 
     def download_file(self, version_id: Version, filename: str) -> IO[bytes]:
-        if version_id not in self.internal_deployment_spec.versions:
-            raise abstract.VersionNotFound(version_id)
+        self._check_version_exists(version_id)
         return BytesIO(self.files[(version_id, filename)])
 
     def delete_file(self, version_id: Version, filename: str) -> None:
-        if version_id not in self.internal_deployment_spec.versions:
-            raise abstract.VersionNotFound(version_id)
+        self._check_version_exists(version_id)
         del self.files[(version_id, filename)]
 
     def iter_files(self, version_id: str) -> Iterable[str]:
+        self._check_version_exists(version_id)
         for version, file in self.files:
             if version_id == version:
                 yield file

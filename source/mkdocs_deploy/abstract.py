@@ -123,16 +123,17 @@ class TargetSession(Protocol):
         """
         Delete a file, or mark it for deletion on close.
         :param version_id: The version to delete from
-        :param filename: The filename to delete with aversion. If version_id is ``...`` then the file is downloaded from
-            the root of the site, not a version. In that case filename must NOT contain ``/``
+        :param filename: The filename to delete with aversion. If version_id is ``DEFAULT_VERSION`` then the file is
+        deleted from the root of the site, not a version. In that case filename must NOT contain ``/``
         """
 
     @abstractmethod
-    def iter_files(self, version_id: str) -> Iterable[str]:
+    def iter_files(self, version_id: Version) -> Iterable[str]:
         """
         Get an iterator over all file names in a version prefix.
 
-        :param version_id: The version_id to fetch
+        :param version_id: The version_id to fetch.  If version is ``DEFAULT_VERSION`` then files in the root will be
+            returned and not any subdirectories.
         :return: An iterator containing every file name without version prefix
         :raises VersionNotFound: If version_id does not exist
         """
@@ -201,7 +202,7 @@ class RedirectMechanism(Protocol):
     @abstractmethod
     def create_redirect(self, session: TargetSession, alias: Version, version_id: str) -> None:
         """
-        Create a redirect
+        Create or refresh a redirect
 
         :param session: The TargetSession to apply changes to
         :param alias: The new alias to create.  If ``None`` is passed, then a redirect from the root is created.  IE: ""

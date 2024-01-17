@@ -3,10 +3,58 @@ import logging
 import os
 from tempfile import SpooledTemporaryFile
 from typing import IO
-
+from urllib.parse import quote
 from .versions import DEPLOYMENTS_FILENAME, DeploymentSpec, MIKE_VERSIONS_FILENAME
 
 _logger = logging.getLogger(__name__)
+
+
+def is_index_file(file_name: str) -> bool:
+    """Check if a filename is an index file
+
+    Test if a filename is an index.htm or index.html file in any directory
+    :param file_name: Filename to test
+    :return: True if filename is an index file or False otherwise"""
+    if file_name in ("index.htm", "index.html"):
+        return True
+    if file_name.endswith("/index.htm") or file_name.endswith("/index.html"):
+        return True
+    return False
+
+
+def relative_link(
+    target_version: str,
+    target_file_name: str,
+    *,
+    source_file_name: str | None = None,
+    from_root: bool = False,
+) -> str:
+    """Generate a relative link for a filename
+
+    The origin is assumed to be a file of the same name, meaning
+    :param target_version: The version target for the link
+    :param target_file_name: The file name to link to
+    :param source_file_name: The filename the link will be relative to.  If None, and if from_root is not set, then
+        source_file_name will default to target_file_name and assume.  This is useful for generating an alias
+        of a file name
+    :param from_root: If True, the relative link is generated from the root of the documentation and source_file_name
+        is ignored.
+        If False, the relative link is generated relative to a file in the same directory in another version.
+        It doesn't matter which other version since the result is always just adding "../"
+    :return: An url escaped relative path
+    """
+    url = "/" + quote(target_file_name, safe="/")
+    if is_index_file(target_file_name):
+        parts = url.split("/")
+        parts[-1] = ""
+        url = "/".join(parts)
+    if from_root:
+        relative = ""
+    else:
+        if source_file_name is None:
+            source_file_name = target_file_name
+        relative = "../" * len(source_file_name.split("/"))
+    return relative + target_version + url
 
 
 def generate_meta_data(deployment_spec: DeploymentSpec) -> dict[str, bytes]:
