@@ -5,7 +5,7 @@ import logging
 import mimetypes
 import tempfile
 import urllib.parse
-from typing import IO, Iterable, NamedTuple, Optional, Union
+from typing import IO, Iterable, NamedTuple, Optional
 
 import boto3
 import botocore.exceptions
@@ -14,8 +14,6 @@ from . import local_filesystem
 from .. import abstract, shared_implementations, versions
 
 _logger = logging.getLogger(__name__)
-logging.getLogger("botocore").setLevel("INFO")
-logging.getLogger("s3transfer").setLevel("INFO")
 
 
 def enable_plugin() -> None:
@@ -35,13 +33,13 @@ class S3Source(contextlib.closing):
         super().__init__(self._exit_stack)
         object_details = s3_details_from_url(file_url)
         try:
-            temp_file: tempfile.TemporaryFile = self._exit_stack.enter_context(tempfile.TemporaryFile())
+            temp_file = self._exit_stack.enter_context(tempfile.TemporaryFile())
             s3 = boto3.client('s3')
-            s3.download_fileobj(object_details.bucket, object_details.key, s3)
+            s3.download_fileobj(object_details.bucket, object_details.key, temp_file)
             self._wrapper = local_filesystem.open_file_obj_source(temp_file)
         except ValueError as exc:
             self._exit_stack.close()
-            raise ValueError(f"Cannot open {file_url}") from exc.__context__
+            raise ValueError(f"Cannot open {file_url}") from exc
         except:
             self._exit_stack.close()
             raise
@@ -82,13 +80,10 @@ class S3TargetSession(abstract.TargetSession):
             raise
 
     def start_version(self, version_id: str, title: str) -> None:
-        if version_id in self._deployment_spec.versions:
-            self._deployment_spec.versions[version_id].title = title
-        else:
-            self._deployment_spec.versions[version_id] = versions.DeploymentVersion(title=title)
+        self._deployment_spec.versions[version_id] = versions.DeploymentVersion(title=title)
         self._changed = True
 
-    def upload_file(self, version_id: Union[str, type(...)], filename: str, file_obj: IO[bytes]) -> None:
+    def upload_file(self, version_id: abstract.Version, filename: str, file_obj: IO[bytes]) -> None:
         extra_args = {}
         mime_type, _ = mimetypes.guess_type(filename)
         if mime_type is not None:
@@ -104,73 +99,73 @@ class S3TargetSession(abstract.TargetSession):
         )
         self._changed = True
 
-
-    def delete_file(self, version_id: Union[str, type(...)], filename: str) -> None:
+    def delete_file(self, version_id: abstract.Version, filename: str) -> None:
         if not self._alias_or_version_exists(version_id):
             raise abstract.VersionNotFound(version_id)
-        try:
-            self._client.delete_object(Bucket=self._bucket, Key=self._key_for(version_id, filename))
-        except botocore.exceptions.ClientError as exc:
-            if exc.response['Error']['Code'] == 'NoSuchKey':
-                raise FileNotFoundError(self._key_for(version_id, filename)) from exc
-            raise
+        # No need to catch an exception here. If the object doesn't exist the call will succeed
+        # https://stackoverflow.com/a/30698746/453851
+        self._client.delete_object(Bucket=self._bucket, Key=self._key_for(version_id, filename))
         self._changed = True
 
     def close(self, success: bool = False) -> None:
-        if self._changed:
-            meta_data = shared_implementations.generate_meta_data(self._deployment_spec)
-            for filename, content in meta_data.items():
-                _logger.debug("Writing %s", filename)
-                self._client.put_object(
-                    Bucket=self._bucket,
-                    Key=self._prefix_key + filename,
-                    Body=content,
-                )
+        if success:
+            if self._changed:
+                meta_data = shared_implementations.generate_meta_data(self._deployment_spec)
+                for filename, content in meta_data.items():
+                    _logger.debug("Writing %s", filename)
+                    self._client.put_object(
+                        Bucket=self._bucket,
+                        Key=self._prefix_key + filename,
+                        Body=content,
+                    )
+            else:
+                _logger.debug("No changes, not writing meta")
         else:
-            _logger.debug("No changes, not writing meta")
+            _logger.warning("Not saving site meta due to error. Site might be in an inconsistent state")
 
-    def delete_version(self, version_id: str) -> None:
-        if version_id not in self._deployment_spec.versions:
+    def delete_version_or_alias(self, version_id: str) -> None:
+        if version_id is abstract.DEFAULT_VERSION:
+            raise RuntimeError(
+                "Attempt to delete the DEFAULT_VERSION. "
+                "This must not happen: it would delete the entire site."
+            )
+        if not self._alias_or_version_exists(version_id):
             raise abstract.VersionNotFound(version_id)
         self._changed = True
         self._clean_directory(version_id)
-        del self._deployment_spec.versions[version_id]
+        self._deployment_spec.versions.pop(version_id, None)
+        self._deployment_spec.aliases.pop(version_id, None)
 
     def _clean_directory(self, version_id: str) -> None:
         for file in self.iter_files(version_id=version_id):
             self.delete_file(version_id, file)
 
-    def download_file(self, version_id: Union[str, type(...)], filename: str) -> IO[bytes]:
+    def download_file(self, version_id: abstract.Version, filename: str) -> IO[bytes]:
         if not self._alias_or_version_exists(version_id):
             raise abstract.VersionNotFound(version_id)
         try:
             result = self._client.get_object(Bucket=self._bucket, Key=self._key_for(version_id, filename))
             return result['Body']
-        except botocore.exceptions.ClientError as exc:
-            if exc.response['Error']['Code'] == 'NoSuchKey':
-                raise FileNotFoundError(self._key_for(version_id, filename)) from exc
+        except self._client.exceptions.NoSuchKey as exc:
+            raise FileNotFoundError(self._key_for(version_id, filename)) from exc
 
-    def iter_files(self, version_id: str) -> Iterable[str]:
+    def iter_files(self, version_id: abstract.Version) -> Iterable[str]:
         paginator = self._client.get_paginator('list_objects_v2')
         prefix = self._key_for(version_id, "")
-        results = paginator.paginate(Bucket=self._bucket, Prefix=prefix)
+        if version_id is abstract.DEFAULT_VERSION:
+            results = paginator.paginate(Bucket=self._bucket, Prefix=prefix, Delimiter="/")
+        else:
+            results = paginator.paginate(Bucket=self._bucket, Prefix=prefix)
         for page in results:
             for file in page.get('Contents', ()):
                 yield file['Key'][len(prefix):]
 
-    def set_alias(self, alias_id: Union[str, type(...)], alias: Optional[versions.DeploymentAlias]) -> None:
+    def set_alias(self, alias_id: abstract.Version, alias: versions.DeploymentAlias) -> None:
         alias = copy.deepcopy(alias)
-        if alias_id is ...:
+        if alias_id is abstract.DEFAULT_VERSION:
             self._deployment_spec.default_version = alias
         else:
-            if alias is None:
-                try:
-                    del self._deployment_spec.aliases[alias_id]
-                    self._clean_directory(alias_id)
-                except KeyError:
-                    pass
-            else:
-                self._deployment_spec.aliases[alias_id] = alias
+            self._deployment_spec.aliases[alias_id] = alias
         self._changed = True
 
     @property
@@ -183,15 +178,15 @@ class S3TargetSession(abstract.TargetSession):
     def deployment_spec(self) -> versions.DeploymentSpec:
         return copy.deepcopy(self._deployment_spec)
 
-    def _key_for(self, version_id: Union[str, type(...)], filename: str) -> str:
-        if version_id is ...:
+    def _key_for(self, version_id: abstract.Version, filename: str) -> str:
+        if version_id is abstract.DEFAULT_VERSION:
             if "/" in filename:
-                raise ValueError(f"filename must not contain '/' if version_id is ...: {filename}")
+                raise ValueError(f"filename must not contain '/' if version_id is DEFAULT_VERSION: {filename}")
             return self._prefix_key + filename
         return f"{self._prefix_key}{version_id}/{filename}"
 
-    def _alias_or_version_exists(self, version_id: Union[str, type(...)]) -> bool:
-        if version_id is ...:
+    def _alias_or_version_exists(self, version_id: abstract.Version) -> bool:
+        if version_id is abstract.DEFAULT_VERSION:
             return True
         return version_id in self._deployment_spec.versions or version_id in self._deployment_spec.aliases
 

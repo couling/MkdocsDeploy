@@ -85,7 +85,7 @@ class TargetSession(Protocol):
         """
 
     @abstractmethod
-    def delete_version(self, version_id: str) -> None:
+    def delete_version_or_alias(self, version_id: Version) -> None:
         """
         Delete a whole version
 
@@ -122,6 +122,8 @@ class TargetSession(Protocol):
     def delete_file(self, version_id: Version, filename: str) -> None:
         """
         Delete a file, or mark it for deletion on close.
+
+        This does NOT raise an exception if the file doesn't exist.
         :param version_id: The version to delete from
         :param filename: The filename to delete with aversion. If version_id is ``DEFAULT_VERSION`` then the file is
         deleted from the root of the site, not a version. In that case filename must NOT contain ``/``
@@ -148,7 +150,7 @@ class TargetSession(Protocol):
         """
 
     @abstractmethod
-    def set_alias(self, alias_id: Version, alias: Optional[DeploymentAlias]) -> None:
+    def set_alias(self, alias_id: Version, alias: DeploymentAlias) -> None:
         """
         Create or delete an alias.
 

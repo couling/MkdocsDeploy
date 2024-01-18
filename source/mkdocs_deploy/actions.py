@@ -77,7 +77,7 @@ def delete_version(target: TargetSession, version_id: str) -> None:
         delete_alias(target, alias_id)
     _logger.info("Deleting version %s", version_id)
     try:
-        target.delete_version(version_id)
+        target.delete_version_or_alias(version_id)
     except VersionNotFound:
         _logger.warning("Not deleting version %s: does not exist", version_id)
 
@@ -187,17 +187,14 @@ def delete_alias(target: TargetSession, alias_id: Version, mechanisms: Collectio
     available_mechanisms = get_redirect_mechanisms(target)
     for mechanism in to_delete:
         try:
-            available_mechanisms[mechanism].delete_redirect(
-                session=target,
-                alias=alias_id,
-            )
+            available_mechanisms[mechanism].delete_redirect(session=target, alias=alias_id)
             alias.redirect_mechanisms.discard(mechanism)
         except KeyError:
             raise ValueError("Mechanism %s not supported by target", mechanism)
     if alias.redirect_mechanisms:
         target.set_alias(alias_id, alias)
     else:
-        target.set_alias(alias_id, None)
+        target.delete_version_or_alias(alias_id)
 
 
 def refresh_alias(target: TargetSession, alias_id: Version, mechanisms: Collection[str] | None = None) -> None:

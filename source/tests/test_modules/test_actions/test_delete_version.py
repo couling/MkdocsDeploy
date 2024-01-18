@@ -1,9 +1,11 @@
-import pytest
 import logging
+
+import pytest
+
 from mkdocs_deploy import abstract
 from mkdocs_deploy.actions import create_alias, delete_version
 from ...mock_plugin import MockTargetSession
-from ...mock_wrapper import mock_wrapper, MethodCall
+from ...mock_wrapper import MethodCall, mock_wrapper
 
 
 def test_delete_version_with_aliases(mock_session: MockTargetSession, alias: abstract.Version):
@@ -20,7 +22,7 @@ def test_delete_version_with_aliases(mock_session: MockTargetSession, alias: abs
     else:
         assert alias not in mock_session.internal_deployment_spec.aliases
 
-    assert MethodCall("MockTargetSession.set_alias", (alias, None), {}) in session_calls
+    assert MethodCall("MockTargetSession.delete_version_or_alias", (alias,), {}) in session_calls
 
 
 def test_delete_missing_version(mock_session: MockTargetSession, alias: abstract.Version, caplog: pytest.LogCaptureFixture):

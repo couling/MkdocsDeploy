@@ -61,14 +61,18 @@ class MockTargetSession(abstract.TargetSession):
     def start_version(self, version_id: str, title: str) -> None:
         self.internal_deployment_spec.versions[version_id] = versions.DeploymentVersion(title=title)
 
-    def delete_version(self, version_id: str) -> None:
-        existing_files = [f for v, f in self.files.keys() if v == version_id]
-        try:
+    def delete_version_or_alias(self, version_id: abstract.Version) -> None:
+        if version_id is abstract.DEFAULT_VERSION:
+            self.internal_deployment_spec.default_version = None
+        elif version_id in self.internal_deployment_spec.versions:
             del self.internal_deployment_spec.versions[version_id]
-        except KeyError:
+        elif version_id in self.internal_deployment_spec.aliases:
+            del self.internal_deployment_spec.aliases[version_id]
+        else:
             raise abstract.VersionNotFound()
-        for file in existing_files:
-            del self.files[(version_id, file)]
+        to_delete = [file for file in self.files if file[0] == version_id]
+        for file in to_delete:
+            del self.files[file]
 
     def _check_version_exists(self, version_id: Version) -> None:
         if version_id is abstract.DEFAULT_VERSION:
@@ -89,7 +93,7 @@ class MockTargetSession(abstract.TargetSession):
         self._check_version_exists(version_id)
         del self.files[(version_id, filename)]
 
-    def iter_files(self, version_id: str) -> Iterable[str]:
+    def iter_files(self, version_id: Version) -> Iterable[str]:
         self._check_version_exists(version_id)
         for version, file in self.files:
             if version_id == version:
@@ -99,16 +103,11 @@ class MockTargetSession(abstract.TargetSession):
         self.closed = True
         self.close_success = success
 
-    def set_alias(self, alias_id: Version, alias: DeploymentAlias | None) -> None:
-        if alias is not None:
-            alias = deepcopy(alias)
+    def set_alias(self, alias_id: Version, alias: DeploymentAlias) -> None:
         if alias_id is abstract.DEFAULT_VERSION:
             self.internal_deployment_spec.default_version = alias
         else:
-            if alias is not None:
-                self.internal_deployment_spec.aliases[alias_id] = alias
-            else:
-                del self.internal_deployment_spec.aliases[alias_id]
+            self.internal_deployment_spec.aliases[alias_id] = alias
 
     @property
     def available_redirect_mechanisms(self) -> dict[str, abstract.RedirectMechanism]:
