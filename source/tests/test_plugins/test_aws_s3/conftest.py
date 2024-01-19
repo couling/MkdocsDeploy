@@ -15,7 +15,7 @@ def default_region(monkeypatch: pytest.MonkeyPatch) -> str:
 @pytest.fixture()
 def s3_bucket(default_region: str) -> Iterable[str]:
     bucket_name = "test-bucket"
-    with moto.mock_s3():
+    with moto.mock_aws():
         client = boto3.client("s3")
         client.create_bucket(
             Bucket=bucket_name,

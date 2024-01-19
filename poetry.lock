@@ -1133,18 +1133,18 @@ mkdocstrings = ">=0.20"
 
 [[package]]
 name = "moto"
-version = "4.2.13"
+version = "5.0.0a2"
 description = ""
 optional = false
-python-versions = ">=3.7"
+python-versions = ">=3.8"
 files = [
-    {file = "moto-4.2.13-py2.py3-none-any.whl", hash = "sha256:93e0fd13b624bd79115494f833308c3641b2be0fc9f4f18aa9264aa01f6168e0"},
-    {file = "moto-4.2.13.tar.gz", hash = "sha256:01aef6a489a725c8d725bd3dc6f70ff1bedaee3e2641752e4b471ff0ede4b4d7"},
+    {file = "moto-5.0.0a2-py2.py3-none-any.whl", hash = "sha256:88ba9b93a9aa5070b170ca58ae1edcde67fa5ee45e57554f40e46c8d38c1d9d3"},
+    {file = "moto-5.0.0a2.tar.gz", hash = "sha256:0f62dfb36afccad3d43fd3b10060cd2c750cf22158ba9b285bbf0068b6e84fab"},
 ]
 
 [package.dependencies]
 boto3 = ">=1.9.201"
-botocore = ">=1.12.201"
+botocore = ">=1.13.46"
 cryptography = ">=3.3.1"
 Jinja2 = ">=2.10.1"
 py-partiql-parser = {version = "0.5.0", optional = true, markers = "extra == \"s3\""}
@@ -1878,4 +1878,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "8c56c7a6e9ec0716cec25a0ee17f122df144f13d494e54181250c5ab0bb0c79a"
+content-hash = "7236a64a76c0601edb3bb1a45dffc1839b9ae8f8112ec97df29d02e2152b2405"
